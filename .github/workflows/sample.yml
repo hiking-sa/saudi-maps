@@ -1,0 +1,17 @@
+name: عينة للتجربة
+on:
+  push:
+    paths: ['.github/workflows/sample.yml']
+permissions: { contents: write }
+jobs:
+  s:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          U=$(curl -s https://api.github.com/repos/protomaps/go-pmtiles/releases/latest | jq -r '.assets[]|select(.name|test("Linux_x86_64"))|.browser_download_url')
+          curl -sSL "$U" | tar xz pmtiles
+          B=$(curl -fsSL https://build-metadata.protomaps.dev/builds.json | jq -r '[.[]|select(.key|test("^[0-9]{8}\\.pmtiles$"))]|sort_by(.key)|last|.key')
+          mkdir out && ./pmtiles extract https://build.protomaps.com/$B out/namas.pmtiles --bbox=42.05,19.95,42.25,20.20 --download-threads=8
+          ls -lh out
+          cd out && git init -q && git checkout -q -b sample && git add -A && git -c user.name=bot -c user.email=bot@x commit -qm s
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" sample
