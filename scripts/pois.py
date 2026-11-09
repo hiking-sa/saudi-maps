@@ -16,7 +16,7 @@ def region_of(lat, lng):
     return None
 def osm_kind(t):
     a, s, n, tu, l = t.get("amenity", ""), t.get("shop", ""), t.get("natural", ""), t.get("tourism", ""), t.get("leisure", "")
-    if a == "place_of_worship" and t.get("religion", "muslim") in ("muslim", ""): return "pray"
+    if (a == "place_of_worship" or t.get("building") == "mosque") and t.get("religion", "muslim") in ("muslim", ""): return "pray"
     if a in ("drinking_water", "water_point") or n == "spring" or t.get("man_made") == "water_well": return "water"
     if a == "toilets": return "wc"
     if a == "parking": return "park"
@@ -30,8 +30,12 @@ def osm_kind(t):
     if tu in ("picnic_site", "camp_site") or a == "shelter" or l == "park": return "rest"
     if tu in ("hotel", "motel", "guest_house", "chalet", "resort"): return "hotel"
     return None
-def ov_kind(c):
+PRAY_W = ("مسجد", "جامع", "مصلى", "mosque", "masjid", "masjed", "jami")
+def ov_kind(c, name=""):
     c = (c or "").lower()
+    nl = (name or "").lower()
+    if any(w in nl for w in PRAY_W) and not any(w in c for w in ("store", "restaurant", "school", "shop")): return "pray"
+    if "religious" in c and "muslim" in c: return "pray"
     if not c: return None
     if "mosque" in c or "muslim_place_of_worship" in c or c == "islamic_place_of_worship": return "pray"
     if "gas_station" in c or "fuel" in c or "ev_charging" in c: return "fuel"
@@ -54,8 +58,24 @@ def centroid(geom):
     if not ring: return None
     xs = [p[0] for p in ring]; ys = [p[1] for p in ring]
     return sum(ys) / len(ys), sum(xs) / len(xs)
+import re
+def norm(n):
+    n = re.sub("[\u064B-\u0652\u0640]", "", (n or "").lower())
+    n = n.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي")
+    for w in ("مسجد", "جامع", "مصلى", "mosque", "masjid"): n = n.replace(w, "")
+    return re.sub(r"[^\w]", "", n)
+def dist(a, b, c, d): return 111320 * math.hypot(a - c, (b - d) * math.cos(math.radians(a)))
+G = {}
+def cell(lat, lng): return (round(lat / 0.0005), round(lng / 0.0005))
+def near(k, lat, lng, r):
+    cy, cx = cell(lat, lng)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            for q in G.get((k, cy + dy, cx + dx), ()):
+                if dist(lat, lng, q[1], q[2]) < r: yield q
+def add(r, p):
+    P[r].append(p); cy, cx = cell(p[1], p[2]); G.setdefault((p[0], cy, cx), []).append(p)
 no = 0
-SEEN = set()
 for line in open(osmf, encoding="utf-8"):
     line = line.strip().lstrip("\x1e")
     if not line: continue
@@ -68,29 +88,24 @@ for line in open(osmf, encoding="utf-8"):
     if not r: continue
     name = t.get("name:ar") or t.get("name") or ""
     if k == "peak" and t.get("ele"): name = (name + " · " if name else "") + str(t.get("ele")).split(".")[0] + " م"
-    key = (k, round(c[0], 4), round(c[1], 4))
-    if key in SEEN: continue
-    SEEN.add(key)
-    P[r].append([k, round(c[0], 5), round(c[1], 5), name[:60], 0]); no += 1
+    if any(True for q in near(k, c[0], c[1], 30) if not q[3] or not name or norm(q[3]) == norm(name)): continue
+    add(r, [k, round(c[0], 5), round(c[1], 5), name[:60], 0]); no += 1
 nv = 0
 if os.path.exists(ovf):
-    grid = {}
-    for r, L in P.items():
-        for i, p in enumerate(L): grid.setdefault((p[0], round(p[1], 3), round(p[2], 3)), []).append(p)
     for row in csv.DictReader(open(ovf, encoding="utf-8")):
-        k = ov_kind(row.get("cat"))
+        name = (row.get("name_ar") or row.get("name") or "").strip()
+        k = ov_kind(row.get("cat"), name + " " + (row.get("name") or ""))
         if not k: continue
         try: lat, lng = float(row["lat"]), float(row["lon"])
         except Exception: continue
-        dup = False
-        for dy in (-0.001, 0, 0.001):
-            for dx in (-0.001, 0, 0.001):
-                if grid.get((k, round(lat + dy, 3), round(lng + dx, 3))): dup = True
+        nn = norm(name); dup = False
+        for q in near(k, lat, lng, 120):
+            dd = dist(lat, lng, q[1], q[2]); qn = norm(q[3])
+            if dd < 15 or (nn and qn and (nn == qn or (len(nn) > 3 and (nn in qn or qn in nn)))) or (dd < 40 and (not nn or not qn)): dup = True; break
         if dup: continue
         r = region_of(lat, lng)
         if not r: continue
-        name = (row.get("name_ar") or row.get("name") or "").strip()
-        P[r].append([k, round(lat, 5), round(lng, 5), name[:60], 1]); nv += 1
+        add(r, [k, round(lat, 5), round(lng, 5), name[:60], 1]); nv += 1
 today = datetime.date.today().isoformat(); stats = {}
 for r, L in P.items():
     L.sort(key=lambda p: (p[0], p[1]))

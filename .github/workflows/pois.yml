@@ -55,7 +55,7 @@ jobs:
           elif "categories" in cols: cat="categories.primary"
           else: cat="NULL"
           nar="COALESCE(TRY(element_at(names.common,'ar')[1]),'')" if "MAP" in cols.get("names","") else "''"
-          conf="COALESCE(confidence,1) >= 0.6" if "confidence" in cols else "TRUE"
+          conf="COALESCE(confidence,1) >= 0.45" if "confidence" in cols else "TRUE"
           q=f"""COPY (SELECT names.primary AS name, {nar} AS name_ar, {cat} AS cat,
                  (bbox.xmin+bbox.xmax)/2 AS lon,(bbox.ymin+bbox.ymax)/2 AS lat
                FROM {src}
