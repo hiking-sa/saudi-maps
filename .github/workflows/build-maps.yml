@@ -37,6 +37,16 @@ jobs:
         run: |
           curl -sSL -o gcc.osm.pbf https://download.geofabrik.de/asia/gcc-states-latest.osm.pbf
           ls -lh gcc.osm.pbf
+      - uses: actions/cache@v4
+        with: { path: data/sources, key: "sources-${{ github.run_id }}", restore-keys: "sources-" }
+      - name: تحميل مصادر البحار والأنهار
+        run: |
+          mkdir -p data/sources && cd data/sources
+          get(){ [ -s "$1" ] && return 0; for i in 1 2 3 4 5 6; do curl -fSL --connect-timeout 60 --max-time 1800 -o "$1.part" "$2" && mv "$1.part" "$1" && return 0; echo "إعادة المحاولة $i"; sleep 30; done; return 1; }
+          get water-polygons-split-3857.zip https://osmdata.openstreetmap.de/download/water-polygons-split-3857.zip
+          get natural_earth_vector.sqlite.zip https://naciscdn.org/naturalearth/packages/natural_earth_vector.sqlite.zip
+          get lake_centerline.shp.zip https://github.com/acalcutt/osm-lakelines/releases/download/v12/lake_centerline.shp.zip
+          ls -lh
       - name: حدود المناطق
         run: |
           osmium tags-filter gcc.osm.pbf r/boundary=administrative -o adm.osm.pbf
@@ -45,7 +55,7 @@ jobs:
       - name: بناء خريطة السعودية كاملة
         run: |
           set -o pipefail
-          java -Xmx12g -jar planetiler.jar --osm-path=gcc.osm.pbf --output=saudi.pmtiles --download \
+          java -Xmx12g -jar planetiler.jar --osm-path=gcc.osm.pbf --output=saudi.pmtiles \
             --bounds=34.4,16.2,55.8,32.3 --maxzoom=14 --languages=ar,en --force 2>&1 | tee build.log
           ls -lh saudi.pmtiles
       - name: تقسيم المناطق
