@@ -13,8 +13,10 @@ for fn in sorted(os.listdir(outdir)):
     with open(p, "rb") as fh:
         for b in iter(lambda: fh.read(1 << 20), b""): h.update(b)
     m = meta.get(k, {})
+    prev = idx["regions"].get(k, {})
     idx["regions"][k] = {"name": m.get("name", k), "name_en": m.get("name_en", ""), "file": f"regions/{fn}",
                          "size": os.path.getsize(p), "md5": h.hexdigest(), "updated": today, "layers": ["base"], "schema": "protomaps", "source": build}
+    if prev.get("terrain"): idx["regions"][k]["terrain"] = prev["terrain"]; idx["regions"][k]["layers"] = ["base", "terrain"]
 idx["updated"] = today
 json.dump(idx, open("index.json", "w"), ensure_ascii=False, indent=1)
 print(json.dumps(idx, ensure_ascii=False, indent=1))

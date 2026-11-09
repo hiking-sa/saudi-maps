@@ -6,7 +6,7 @@ on:
         description: "المناطق (مفصولة بمسافة) أو all"
         default: "asir"
   push:
-    paths: ['.github/workflows/build-maps.yml', 'scripts/**']
+    paths: ['.github/workflows/build-maps.yml', 'scripts/regions.py', 'scripts/index.py']
   schedule:
     - cron: "17 2 3 * *"   # كل شهر يوم 3 الساعة 5:17 الفجر بتوقيت السعودية
 concurrency: { group: maps, cancel-in-progress: true }
