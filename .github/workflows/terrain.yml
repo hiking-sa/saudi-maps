@@ -4,7 +4,7 @@ on:
     inputs:
       regions:
         description: "المناطق (مفصولة بمسافة)"
-        default: "asir baha"
+        default: "asir baha makkah jazan najran madinah tabuk"
   push:
     paths: ['.github/workflows/terrain.yml', 'scripts/cop_tiles.py', 'scripts/index_terrain.py']
 concurrency: { group: terrain, cancel-in-progress: true }
@@ -17,7 +17,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: auto
-      REGIONS: ${{ github.event.inputs.regions || 'asir baha' }}
+      REGIONS: ${{ github.event.inputs.regions || 'asir baha makkah jazan najran madinah tabuk' }}
       GDAL_DISABLE_READDIR_ON_OPEN: EMPTY_DIR
       CPL_VSIL_CURL_ALLOWED_EXTENSIONS: .tif
       GDAL_HTTP_MAX_RETRY: "5"
@@ -64,14 +64,14 @@ jobs:
               if not l: continue
               f=json.loads(l); e=int(round(f['properties']['ele'])); f['properties']={'ele':e,'idx':1 if e%100==0 else 0}; o.write(json.dumps(f)+'\n')"
             rm $k-c.geojsonseq
-            tippecanoe -q -o $k-contours.pmtiles -l contour -Z10 -z14 --force --no-tile-size-limit --simplification=6 \
-              -j '{"contour":["any",[">=","$zoom",13],["==","idx",1]]}' -P $k-c2.geojsonseq
+            tippecanoe -q -o $k-contours.pmtiles -l contour -Z10 -z13 --force --no-tile-size-limit --simplification=8 \
+              -j '{"contour":["any",[">=","$zoom",12],["==","idx",1]]}' -P $k-c2.geojsonseq
             rm $k-c2.geojsonseq
             # التظليل: صور ارتفاعات بترميز terrain-rgb للمستوى 12
             gdalwarp -q -overwrite -t_srs EPSG:3857 -r bilinear -srcnodata -32768 -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi $k-dem.tif $k-3857.tif
             /usr/bin/python3 scripts/rgb.py $k-3857.tif $k-rgb.tif
             G2T=$(which gdal2tiles.py || which gdal2tiles)
-            /usr/bin/python3 $G2T --xyz -z 6-12 -r near -w none --processes=4 -q $k-rgb.tif t-$k
+            /usr/bin/python3 $G2T --xyz -z 6-11 -r near -w none --processes=4 -q $k-rgb.tif t-$k
             /usr/bin/python3 scripts/dir2mbtiles.py t-$k $k-dem.mbtiles $k-dem
             rm -rf t-$k $k-rgb.tif
             ./pmtiles convert $k-dem.mbtiles out/$k-dem.pmtiles
@@ -89,6 +89,16 @@ jobs:
           python3 scripts/index_terrain.py index.json out | tee -a build.log
           aws s3 cp index.json s3://saudi-maps/index.json --endpoint-url "$EP" --content-type "application/json; charset=utf-8" --cache-control "max-age=3600"
           cp index.json index.public.json
+      - name: عينة صغيرة للتجربة (النماص)
+        if: always()
+        run: |
+          [ -f out/asir-dem.pmtiles ] || exit 0
+          mkdir -p /tmp/sm && B=$(curl -fsSL https://build-metadata.protomaps.dev/builds.json | jq -r '[.[]|select(.key|test("^[0-9]{8}\\.pmtiles$"))]|sort_by(.key)|last|.key')
+          ./pmtiles extract https://build.protomaps.com/$B /tmp/sm/base.pmtiles --bbox=42.0,19.0,42.3,19.3
+          ./pmtiles extract out/asir-dem.pmtiles /tmp/sm/dem.pmtiles --bbox=42.0,19.0,42.3,19.3
+          ./pmtiles extract out/asir-contours.pmtiles /tmp/sm/contours.pmtiles --bbox=42.0,19.0,42.3,19.3
+          cd /tmp/sm && ls -l && git init -q && git checkout -q -b sample2 && git add -A && git -c user.name=bot -c user.email=bot@x commit -qm s
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" sample2
       - name: حفظ السجل
         if: always()
         run: |
