@@ -1,0 +1,31 @@
+المناطق: 13 ['asir', 'baha', 'eastern', 'hail', 'jazan', 'jouf', 'madinah', 'makkah', 'najran', 'northern-borders', 'qassim', 'riyadh', 'tabuk']
+192984 osm.geojsonseq
+Overture release: 2026-10-21.0
+columns: {'id': 'VARCHAR', 'geometry': "GEOMETRY('OGC:CRS84')", 'confidence': 'DOUBLE', 'websites': 'VARCHAR[]', 'emails': 'VARCHAR[]', 'socials': 'VARCHAR[]', 'phones': 'VARCHAR[]', 'brand': 'STRUCT(wikidata VARCHAR, "names" STRUCT("primary" VARCHAR, common MAP(VARCHAR, VARCHAR), rules STRUCT(variant VARCHAR, "', 'addresses': 'STRUCT(freeform VARCHAR, locality VARCHAR, postcode VARCHAR, region VARCHAR, country VARCHAR)[]', 'names': 'STRUCT("primary" VARCHAR, common MAP(VARCHAR, VARCHAR), rules STRUCT(variant VARCHAR, "language" VARCHAR, perspectives S', 'sources': 'STRUCT(property VARCHAR, dataset VARCHAR, license VARCHAR, record_id VARCHAR, update_time VARCHAR, confidence DOUBLE, "b', 'operating_status': 'VARCHAR', 'basic_category': 'VARCHAR', 'taxonomy': 'STRUCT("primary" VARCHAR, hierarchy VARCHAR[], alternates VARCHAR[])', 'version': 'INTEGER', 'bbox': 'STRUCT(xmin DOUBLE, xmax DOUBLE, ymin DOUBLE, ymax DOUBLE)', 'theme': 'VARCHAR', 'type': 'VARCHAR'}
+COPY (SELECT names.primary AS name, COALESCE(TRY(element_at(names.common,'ar')[1]),'') AS name_ar, basic_category AS cat,
+       (bbox.xmin+bbox.xmax)/2 AS lon,(bbox.ymin+bbox.ymax)/2 AS lat
+     FROM read_parquet('s3://overturemaps-us-west-2/release/2026-10-21.0/theme=places/type=place/*', hive_partitioning=1)
+     WHERE bbox.xmin BETWEEN 34.4 AND 55.8 AND bbox.ymin BETWEEN 16.2 AND 32.3 AND COALESCE(confidence,1) >= 0.45)
+   TO 'ov.csv' (HEADER, DELIMITER ',')
+(429279,)
+[('restaurant', 44846), ('fashion_and_apparel_store', 19957), ('personal_or_beauty_service', 14652), (None, 12295), ('coffee_shop', 12035), ('hotel', 11431), ('real_estate_service', 10521), ('casual_eatery', 10241), ('food_and_beverage_store', 9849), ('hardware_home_and_garden_store', 9575), ('automotive_service', 8745), ('professional_service', 8480), ('historic_site', 8339), ('cafe', 8191), ('hospital', 7444), ('shopping', 6797), ('home_service', 6689), ('fast_food_restaurant', 6471), ('travel_service', 6466), ('event_or_party_service', 6331), ('electronics_store', 5750), ('financial_service', 5590), ('pharmacy_and_drug_store', 5587), ('corporate_or_business_office', 5490), ('place_of_learning', 5422), ('dental_clinic', 4964), ('wellness_service', 4603), ('auto_dealer', 4573), ('bank_or_credit_union', 4476), ('gym', 4462), ('muslim_place_of_worship', 4130), ('attorney_or_law_firm', 3772), ('manufacturer', 3722), ('shopping_mall', 3544), ('government_office', 3488), ('gas_station', 3457), ('bar', 3452), ('sport_or_fitness_facility', 3168), ('personal_care_and_beauty_store', 3160), ('park', 3115)]
+-rw-r--r-- 1 runner runner 35M Nov  9 18:03 ov.csv
+OSM: 57284 Overture: 37893 {'northern-borders': 1223, 'jouf': 1587, 'qassim': 6947, 'hail': 2712, 'riyadh': 26982, 'baha': 529, 'najran': 1271, 'asir': 4326, 'tabuk': 3548, 'jazan': 2884, 'madinah': 6851, 'makkah': 20604, 'eastern': 15713}
+total 4.5M
+-rw-r--r-- 1 runner runner   745 Nov  9 18:03 _bbox.json
+-rw-r--r-- 1 runner runner  194K Nov  9 18:03 asir.json
+-rw-r--r-- 1 runner runner   27K Nov  9 18:03 baha.json
+-rw-r--r-- 1 runner runner  746K Nov  9 18:03 eastern.json
+-rw-r--r-- 1 runner runner  127K Nov  9 18:03 hail.json
+-rw-r--r-- 1 runner runner  126K Nov  9 18:03 jazan.json
+-rw-r--r-- 1 runner runner   70K Nov  9 18:03 jouf.json
+-rw-r--r-- 1 runner runner  334K Nov  9 18:03 madinah.json
+-rw-r--r-- 1 runner runner 1016K Nov  9 18:03 makkah.json
+-rw-r--r-- 1 runner runner   56K Nov  9 18:03 najran.json
+-rw-r--r-- 1 runner runner   55K Nov  9 18:03 northern-borders.json
+-rw-r--r-- 1 runner runner  317K Nov  9 18:03 qassim.json
+-rw-r--r-- 1 runner runner  1.3M Nov  9 18:03 riyadh.json
+-rw-r--r-- 1 runner runner  143K Nov  9 18:03 tabuk.json
+Completed 8.8 KiB/8.8 KiB (13.8 KiB/s) with 1 file(s) remainingdownload: s3://saudi-maps/index.json to ./index.json           
+{'asir': 4326, 'baha': 529, 'eastern': 15713, 'hail': 2712, 'jazan': 2884, 'jouf': 1587, 'madinah': 6851, 'makkah': 20604, 'najran': 1271, 'northern-borders': 1223, 'qassim': 6947, 'riyadh': 26982, 'tabuk': 3548}
+Completed 8.8 KiB/8.8 KiB (16.4 KiB/s) with 1 file(s) remainingupload: ./index.json to s3://saudi-maps/index.json             

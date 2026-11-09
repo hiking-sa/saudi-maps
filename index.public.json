@@ -1,0 +1,436 @@
+{
+ "v": 1,
+ "regions": {
+  "asir": {
+   "name": "منطقة عسير",
+   "name_en": "'Asir Province",
+   "file": "regions/asir.pmtiles",
+   "size": 22001959,
+   "md5": "6c9f15403e484d5c689078de29c6773e",
+   "updated": "2026-11-09",
+   "layers": [
+    "base",
+    "terrain"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "terrain": {
+    "contours": {
+     "file": "terrain/asir-contours.pmtiles",
+     "size": 47667889,
+     "md5": "b53f387f61f3dd2adda057b975e835f8",
+     "updated": "2026-11-09"
+    },
+    "dem": {
+     "file": "terrain/asir-dem.pmtiles",
+     "size": 30652921,
+     "md5": "93b0323abd70f333aac56366f5aa294c",
+     "updated": "2026-11-09"
+    }
+   },
+   "pois": {
+    "file": "pois/asir.json",
+    "size": 197659,
+    "n": 4326,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    41.3657,
+    17.3667,
+    44.4873,
+    20.8027
+   ]
+  },
+  "baha": {
+   "name": "منطقة الباحة",
+   "name_en": "Al-Bahah Province",
+   "file": "regions/baha.pmtiles",
+   "size": 5267579,
+   "md5": "7741b254be0431432a63c9dde865852d",
+   "updated": "2026-11-09",
+   "layers": [
+    "base",
+    "terrain"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "terrain": {
+    "contours": {
+     "file": "terrain/baha-contours.pmtiles",
+     "size": 9395573,
+     "md5": "5aa8f6e45ca2a847cce71f18625cc726",
+     "updated": "2026-11-09"
+    },
+    "dem": {
+     "file": "terrain/baha-dem.pmtiles",
+     "size": 4988473,
+     "md5": "2c187dbd00039ce50c3efc23e4dd5b23",
+     "updated": "2026-11-09"
+    }
+   },
+   "pois": {
+    "file": "pois/baha.json",
+    "size": 26861,
+    "n": 529,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    40.8359,
+    19.4419,
+    42.13,
+    20.8294
+   ]
+  },
+  "eastern": {
+   "name": "المنطقة الشرقية",
+   "name_en": "Eastern Province",
+   "file": "regions/eastern.pmtiles",
+   "size": 57188833,
+   "md5": "f6334e317de2572c4d5220d8906de371",
+   "updated": "2026-11-09",
+   "layers": [
+    "base"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "pois": {
+    "file": "pois/eastern.json",
+    "size": 763014,
+    "n": 15713,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    44.646,
+    19.0005,
+    55.6667,
+    29.1593
+   ]
+  },
+  "hail": {
+   "name": "منطقة حائل",
+   "name_en": "Ḥa'il Province",
+   "file": "regions/hail.pmtiles",
+   "size": 41092473,
+   "md5": "d70a2e5f571a3ee4f6623a8c08084130",
+   "updated": "2026-11-09",
+   "layers": [
+    "base"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "pois": {
+    "file": "pois/hail.json",
+    "size": 129909,
+    "n": 2712,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    39.1142,
+    25.2544,
+    44.3674,
+    29.2079
+   ]
+  },
+  "jazan": {
+   "name": "منطقة جازان",
+   "name_en": "Jazan Province",
+   "file": "regions/jazan.pmtiles",
+   "size": 14311161,
+   "md5": "60ca8b1d350123c8f2b397d651094341",
+   "updated": "2026-11-09",
+   "layers": [
+    "base",
+    "terrain"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "terrain": {
+    "contours": {
+     "file": "terrain/jazan-contours.pmtiles",
+     "size": 6467817,
+     "md5": "05ad418b9792b37ee3937b391d9d2a6f",
+     "updated": "2026-11-09"
+    },
+    "dem": {
+     "file": "terrain/jazan-dem.pmtiles",
+     "size": 4664887,
+     "md5": "84a704766765b63208a8296bbed35150",
+     "updated": "2026-11-09"
+    }
+   },
+   "pois": {
+    "file": "pois/jazan.json",
+    "size": 128761,
+    "n": 2884,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    41.4569,
+    16.3795,
+    43.3365,
+    18.0587
+   ]
+  },
+  "jouf": {
+   "name": "منطقة الجوف",
+   "name_en": "Al Jawf Region",
+   "file": "regions/jouf.pmtiles",
+   "size": 34978704,
+   "md5": "2b6816094afd7605a8c77a75576cde9b",
+   "updated": "2026-11-09",
+   "layers": [
+    "base"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "pois": {
+    "file": "pois/jouf.json",
+    "size": 71062,
+    "n": 1587,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    37.0062,
+    28.3679,
+    41.9968,
+    31.7451
+   ]
+  },
+  "madinah": {
+   "name": "منطقة المدينة المنورة",
+   "name_en": "Medina Province",
+   "file": "regions/madinah.pmtiles",
+   "size": 35868591,
+   "md5": "e67351c6427348ef5452f1cb19d97b14",
+   "updated": "2026-11-09",
+   "layers": [
+    "base",
+    "terrain"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "terrain": {
+    "contours": {
+     "file": "terrain/madinah-contours.pmtiles",
+     "size": 70442701,
+     "md5": "152e2f63341809fc3ba7ed417949c204",
+     "updated": "2026-11-09"
+    },
+    "dem": {
+     "file": "terrain/madinah-dem.pmtiles",
+     "size": 56619125,
+     "md5": "e850e3f7748dfb719cb8320d32677d23",
+     "updated": "2026-11-09"
+    }
+   },
+   "pois": {
+    "file": "pois/madinah.json",
+    "size": 341224,
+    "n": 6851,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    37.084,
+    22.5197,
+    42.1587,
+    27.4733
+   ]
+  },
+  "makkah": {
+   "name": "منطقة مكة المكرمة",
+   "name_en": "Makkah Region",
+   "file": "regions/makkah.pmtiles",
+   "size": 40596647,
+   "md5": "03ef99929a9d6891710afb62d51ed7dc",
+   "updated": "2026-11-09",
+   "layers": [
+    "base",
+    "terrain"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "terrain": {
+    "contours": {
+     "file": "terrain/makkah-contours.pmtiles",
+     "size": 48782642,
+     "md5": "f1e5dcf67a1ebf56afd27e9a0604138d",
+     "updated": "2026-11-09"
+    },
+    "dem": {
+     "file": "terrain/makkah-dem.pmtiles",
+     "size": 46796652,
+     "md5": "592ae7500d216f22f8a678526bc94bad",
+     "updated": "2026-11-09"
+    }
+   },
+   "pois": {
+    "file": "pois/makkah.json",
+    "size": 1039450,
+    "n": 20604,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    38.6598,
+    18.2812,
+    43.8302,
+    23.6952
+   ]
+  },
+  "najran": {
+   "name": "منطقة نجران",
+   "name_en": "Najran Region",
+   "file": "regions/najran.pmtiles",
+   "size": 8891109,
+   "md5": "09e5ff03ab3a87c5d60509d269c6fd8e",
+   "updated": "2026-11-09",
+   "layers": [
+    "base",
+    "terrain"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "terrain": {
+    "contours": {
+     "file": "terrain/najran-contours.pmtiles",
+     "size": 35412861,
+     "md5": "ed6712dc5467c39c7340ff9e1e4d08bb",
+     "updated": "2026-11-09"
+    },
+    "dem": {
+     "file": "terrain/najran-dem.pmtiles",
+     "size": 44631606,
+     "md5": "f82d963283592f838116e2b36efff2ab",
+     "updated": "2026-11-09"
+    }
+   },
+   "pois": {
+    "file": "pois/najran.json",
+    "size": 56554,
+    "n": 1271,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    43.5957,
+    16.95,
+    52.0018,
+    19.4489
+   ]
+  },
+  "northern-borders": {
+   "name": "منطقة الحدود الشمالية",
+   "name_en": "Northern Borders Province",
+   "file": "regions/northern-borders.pmtiles",
+   "size": 34118672,
+   "md5": "296c0ab43a754628b6d8d1b7d95b3291",
+   "updated": "2026-11-09",
+   "layers": [
+    "base"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "pois": {
+    "file": "pois/northern-borders.json",
+    "size": 55718,
+    "n": 1223,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    37.9605,
+    27.9308,
+    45.172,
+    32.1543
+   ]
+  },
+  "qassim": {
+   "name": "منطقة القصيم",
+   "name_en": "Al-Qassim Province",
+   "file": "regions/qassim.pmtiles",
+   "size": 33476545,
+   "md5": "410f417cacf79bb8e9882afaaf8eceb1",
+   "updated": "2026-11-09",
+   "layers": [
+    "base"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "pois": {
+    "file": "pois/qassim.json",
+    "size": 324213,
+    "n": 6947,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    41.3006,
+    24.4836,
+    44.9895,
+    28.2508
+   ]
+  },
+  "riyadh": {
+   "name": "منطقة الرياض",
+   "name_en": "Riyadh Region",
+   "file": "regions/riyadh.pmtiles",
+   "size": 101963850,
+   "md5": "1b548db11f750e4e9d11fd12e88f78c1",
+   "updated": "2026-11-09",
+   "layers": [
+    "base"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "pois": {
+    "file": "pois/riyadh.json",
+    "size": 1319243,
+    "n": 26982,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    41.6811,
+    19.2083,
+    48.2582,
+    27.7021
+   ]
+  },
+  "tabuk": {
+   "name": "منطقة تبوك",
+   "name_en": "Tabuk Province",
+   "file": "regions/tabuk.pmtiles",
+   "size": 32017791,
+   "md5": "ffed6bee179fee3b4de1fe7a95d90394",
+   "updated": "2026-11-09",
+   "layers": [
+    "base",
+    "terrain"
+   ],
+   "schema": "protomaps",
+   "source": "20261109",
+   "terrain": {
+    "contours": {
+     "file": "terrain/tabuk-contours.pmtiles",
+     "size": 60146129,
+     "md5": "47b6d0d7259a8ec102a7f9cf9c0a0581",
+     "updated": "2026-11-09"
+    },
+    "dem": {
+     "file": "terrain/tabuk-dem.pmtiles",
+     "size": 57510538,
+     "md5": "9fb92e62b6a920bc56f53f554ca0df77",
+     "updated": "2026-11-09"
+    }
+   },
+   "pois": {
+    "file": "pois/tabuk.json",
+    "size": 145709,
+    "n": 3548,
+    "updated": "2026-11-09"
+   },
+   "bbox": [
+    34.4944,
+    24.5618,
+    39.9418,
+    29.9756
+   ]
+  }
+ },
+ "updated": "2026-11-09"
+}
