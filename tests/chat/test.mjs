@@ -1,0 +1,21 @@
+import {initializeTestEnvironment} from "@firebase/rules-unit-testing";
+import {readFileSync} from "fs";
+const which=process.argv[2];const rules=readFileSync(which+".rules","utf8");
+const env=await initializeTestEnvironment({projectId:"demo-"+which,firestore:{rules,host:"127.0.0.1",port:8080}});
+const A="uidAAAA1111",B="uidBBBB2222",G="g1";
+const base=which==="namas"?"":`groups/${G}/`;
+await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();
+  if(which==="namas"){for(const u of [A,B])await d.doc("users/"+u).set({status:"active",role:"member",name:u})}
+  else{await d.doc(`groups/${G}`).set({status:"active",name:"g"});for(const u of [A,B]){await d.doc(`groups/${G}/roles/${u}`).set({status:"active",role:"member"});await d.doc("users/"+u).set({status:"active",name:u})}}});
+const fa=env.authenticatedContext(A).firestore(),fb=env.authenticatedContext(B).firestore();
+const room="dm_"+[A,B].sort().join("_");const step=async(n,p)=>{try{const r=await p;console.log("OK  ",n,r===undefined?"":r)}catch(e){console.log("FAIL",n,e.code||"",String(e.message).slice(0,160))}};
+const msg=(u,t)=>({uid:u,name:"x",role:"member",txt:t,t:Date.now()});
+await step("A send msg",fa.collection(base+"chats").doc(room).collection("msgs").doc().set(msg(A,"hi")));
+await step("A meta create",fa.collection(base+"chats").doc(room).set({last:{t:1,txt:"hi",name:"x",by:A},members:[A,B].sort(),type:"dm"},{merge:true}));
+await step("B reply",fb.collection(base+"chats").doc(room).collection("msgs").doc().set(msg(B,"yo")));
+await step("B meta update",fb.collection(base+"chats").doc(room).set({last:{t:2,txt:"yo",name:"y",by:B},members:[A,B].sort(),type:"dm"},{merge:true}));
+await step("A list dms",fa.collection(base+"chats").where("members","array-contains",A).get().then(q=>q.size));
+await step("B list dms",fb.collection(base+"chats").where("members","array-contains",B).get().then(q=>q.size));
+await step("A read msgs",fa.collection(base+"chats").doc(room).collection("msgs").orderBy("t","desc").limit(50).get().then(q=>q.size));
+await step("A meta get",fa.collection(base+"chats").doc(room).get().then(d=>d.exists));
+await env.cleanup();process.exit(0);

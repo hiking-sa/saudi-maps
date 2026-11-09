@@ -1,0 +1,483 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    // مزايا الأعضاء: يمنحها ويسحبها المدير التقني وحده (افتراضيًا مفتوحة)
+    function featsPath() { return /databases/$(database)/documents/meta/feats; }
+    function feat(k) { return !exists(featsPath())
+      || get(featsPath()).data.get('m', {}).get(request.auth.uid, {}).get(k, get(featsPath()).data.get('def', {}).get(k, true)) == true; }
+    function userDoc() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function me() { return get(userDoc()).data; }
+    function active() { return signed() && exists(userDoc()) && me().status == 'active'; }
+    // المدير التقني (owner): صلاحيات الرئيس كاملة وأعلى، ولا يملك أحد صلاحية على حسابه
+    function staff() { return active() && me().role in ['president', 'supervisor', 'owner']; }
+    function president() { return active() && me().role in ['president', 'owner']; }
+    function owner() { return active() && me().role == 'owner'; }
+    function presUid(id) { return exists(/databases/$(database)/documents/users/$(id))
+      && get(/databases/$(database)/documents/users/$(id)).data.role == 'president'; }
+    function ownerUid(id) { return exists(/databases/$(database)/documents/users/$(id))
+      && get(/databases/$(database)/documents/users/$(id)).data.role == 'owner'; }
+    function staffOver(id) { return (president() && (owner() || !ownerUid(id))) || (staff() && !presUid(id) && !ownerUid(id)); }
+    function bootPath() { return /databases/$(database)/documents/meta/bootstrap; }
+    function ownerPath() { return /databases/$(database)/documents/meta/owner; }
+
+    // أول من يسجّل يصبح رئيس النادي، مرة واحدة فقط
+    match /meta/bootstrap {
+      allow get: if signed();
+      allow create: if signed() && !exists(bootPath())
+        && getAfter(userDoc()).data.role == 'president';
+    }
+
+    // يتحوّل رئيس النادي إلى المدير التقني مرة واحدة فقط في عمر المنصة
+    match /meta/feats {
+      allow get: if signed();
+      allow write: if owner();
+    }
+
+    match /meta/owner {
+      allow get: if signed();
+      allow create: if active() && me().role == 'president' && !exists(ownerPath())
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(userDoc()).data.role == 'owner';
+    }
+
+    match /users/{uid} {
+      allow get: if signed() && (request.auth.uid == uid || staff());
+      allow list: if staff();
+      allow create: if
+          (signed() && request.auth.uid == uid
+            && request.resource.data.role == 'member' && request.resource.data.status == 'pending')
+        || (signed() && request.auth.uid == uid
+            && request.resource.data.role == 'president' && request.resource.data.status == 'active'
+            && !exists(bootPath()) && existsAfter(bootPath()))
+        || (staff() && request.resource.data.status == 'active'
+            && (request.resource.data.role == 'member'
+                || (president() && request.resource.data.role == 'supervisor')));
+      allow update: if (president() && request.auth.uid != uid
+            && (owner() || resource.data.role != 'owner')
+            && (request.resource.data.role != 'owner' || resource.data.role == 'owner'))
+        || (signed() && request.auth.uid == uid && resource.data.role == 'president' && resource.data.status == 'active'
+            && request.resource.data.role == 'owner'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
+            && !exists(ownerPath()) && existsAfter(ownerPath()))
+        || (staff() && resource.data.role == 'member' && request.resource.data.role == 'member'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        || (active() && request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'mustPw']));
+      // رئيس النادي يحذف أي حساب، وكل عضو يستطيع حذف حسابه بنفسه
+      allow delete: if (president() && request.auth.uid != uid && resource.data.role != 'owner') || (signed() && request.auth.uid == uid);
+    }
+
+    // البيانات العامة للعضو (الاسم والمدينة والمستوى والصورة): يراها كل الأعضاء المفعّلين
+    match /members/{id} {
+      allow read: if active();
+      // توثيق الهوية (idv) تضعه الإدارة فقط، ولا يستطيع العضو توثيق نفسه
+      allow create: if (signed() && request.auth.uid == id && request.resource.data.get('idv', '') == '' && request.resource.data.get('gLic', '') == '') || staffOver(id);
+      allow update: if staffOver(id) || (active() && request.auth.uid == id
+                     && request.resource.data.get('idv', '') == resource.data.get('idv', '')
+                     && request.resource.data.get('gLic', '') == resource.data.get('gLic', '')
+                     && request.resource.data.get('gLicExp', '') == resource.data.get('gLicExp', ''));
+      allow delete: if staffOver(id) || (signed() && request.auth.uid == id);
+    }
+
+    // الجوال والدم والطوارئ: للعضو نفسه وللإدارة فقط
+    match /memberPrivate/{id} {
+      allow read: if staff() || (signed() && request.auth.uid == id);
+      allow create: if (signed() && request.auth.uid == id) || staffOver(id);
+      allow update: if staffOver(id) || (active() && request.auth.uid == id);
+      allow delete: if staffOver(id) || (signed() && request.auth.uid == id);
+    }
+
+    // مسارات النادي: الإدارة تعدّل الكل، والعضو يضيف مسارًا مكتشفًا ويعدّل ما أضافه هو فقط
+    // المسار الموثّق باسم مكتشفه: لا يوثّقه ولا يعدّله ولا يحذفه إلا رئيس النادي
+    // صفحة العضو العامة (حسابات التواصل): يقرؤها من يمسح الباركود، ولا يكتبها إلا صاحبها
+    // صورة الهوية من توكلنا: يرفعها العضو، ويراها الرئيس والمشرفون فقط، وتُحذف بعد التوثيق
+    // صورة رخصة المرشد: يرفعها العضو، ويراها ويعتمدها الرئيس والمشرفون، وتُحذف بعد الاعتماد
+    match /licDocs/{id} {
+      allow read: if staff() || (signed() && request.auth.uid == id);
+      allow create, update: if active() && request.auth.uid == id
+        && request.resource.data.img is string && request.resource.data.img.size() < 900000;
+      allow delete: if staffOver(id) || (signed() && request.auth.uid == id);
+    }
+
+    // رسائل الترحيب (فيها كلمة المرور المؤقتة): للرئيس والمشرفين فقط، والعضو يحذف كلمة مروره المؤقتة بعد تغييرها
+    match /welcome/{id} {
+      allow read, create: if staff();
+      allow update: if staff() || (signed() && request.auth.uid == id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pw', 'changedAt']) && !('pw' in request.resource.data));
+      allow delete: if staff();
+    }
+
+    match /idDocs/{id} {
+      allow read: if staff() || (signed() && request.auth.uid == id);
+      allow create, update: if active() && request.auth.uid == id
+        && request.resource.data.img is string && request.resource.data.img.size() < 900000;
+      allow delete: if staffOver(id) || (signed() && request.auth.uid == id);
+    }
+
+    // شهادات العضو ودوراته (صورة + عنوان)
+    match /memberCerts/{id} {
+      allow read: if active();
+      allow create: if (active() && request.resource.data.mid == request.auth.uid && feat('certs') || staffOver(request.resource.data.mid))
+        && request.resource.data.photo is string && request.resource.data.photo.size() < 900000;
+      allow update: if (staffOver(resource.data.mid) || (active() && resource.data.mid == request.auth.uid))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['feat']);
+      allow delete: if staffOver(resource.data.mid) || (active() && resource.data.mid == request.auth.uid);
+    }
+
+    // المسارات السابقة: يضيفها العضو «بانتظار الاعتماد»، والإدارة تعتمدها فتُحتسب نقاطها
+    match /pastHikes/{id} {
+      allow read: if active();
+      allow create: if (active() && request.resource.data.mid == request.auth.uid && request.resource.data.st == 'p'
+          || (staffOver(request.resource.data.mid) && (request.resource.data.mid != request.auth.uid || president())))
+        && request.resource.data.get('photo', '').size() < 700000;
+      allow update: if staffOver(resource.data.mid) && (resource.data.mid != request.auth.uid || president()) && request.resource.data.mid == resource.data.mid
+        && (request.resource.data.get('st', '') != 'a' || president());
+      allow delete: if staffOver(resource.data.mid) || (active() && resource.data.mid == request.auth.uid && resource.data.st != 'a');
+    }
+
+    match /publicProfiles/{uid} {
+      allow read: if true;
+      allow create, update: if signed() && request.auth.uid == uid && feat('pub');
+      allow delete: if (signed() && request.auth.uid == uid) || owner();
+    }
+
+    // صور الشهادات الواضحة لصفحة الباركود: عامة القراءة، ويكتبها صاحبها فقط
+    match /publicCerts/{cid} {
+      allow read: if true;
+      allow create, update: if signed() && request.resource.data.mid == request.auth.uid
+        && cid.matches(request.auth.uid + '_.+')
+        && request.resource.data.img is string && request.resource.data.img.size() < 900000 && feat('pub');
+      allow delete: if (signed() && cid.matches(request.auth.uid + '_.+')) || owner();
+    }
+
+    // صور معالم المسار: يراها أعضاء النادي، ويضيفها الرئيس والمشرفون ومكتشف المسار
+    // الصورة الرئيسية للمسار: يراها الأعضاء ويضعها الرئيس والمشرفون
+    match /routeCovers/{id} {
+      allow read: if active();
+      allow create, update: if staff() && request.resource.data.by == request.auth.uid
+        && request.resource.data.photo is string && request.resource.data.photo.size() < 900000;
+      allow delete: if staff();
+    }
+
+    // تقييم الأثر البيئي والمجتمعي للرحلة: يراه الأعضاء، ويكتبه الرئيس والمشرفون أو مدير الرحلة نفسه
+    match /impact/{tid} {
+      allow read: if active();
+      allow create, update: if (staff() || (active() && exists(/databases/$(database)/documents/trips/$(tid))
+          && get(/databases/$(database)/documents/trips/$(tid)).data.get('leader', '') == request.auth.uid))
+        && request.resource.data.size() < 30 && request.resource.data.get('note', '').size() <= 400;
+      allow delete: if staff();
+    }
+
+    // روابط مقاطع فيديو المسار (يوتيوب، تيك توك، إنستغرام...): يرفقها أي عضو مفعّل، ويحذفها صاحبها أو الإدارة
+    match /routeVideos/{id} {
+      allow read: if active();
+      allow create: if active() && request.resource.data.by == request.auth.uid
+        && request.resource.data.u is string && request.resource.data.u.size() <= 500 && request.resource.data.u.matches('https?://.+')
+        && request.resource.data.get('t', '').size() <= 80 && request.resource.data.size() <= 8;
+      allow delete: if staff() || (active() && resource.data.by == request.auth.uid);
+    }
+
+    // دروع العضو وتكريماته (صورة + عنوان): تظهر في حسابه وصفحة الباركود
+    match /memberShields/{id} {
+      allow read: if active();
+      allow create: if (active() && request.resource.data.mid == request.auth.uid && feat('certs') || staffOver(request.resource.data.mid))
+        && request.resource.data.photo is string && request.resource.data.photo.size() < 900000;
+      allow delete: if staffOver(resource.data.mid) || (active() && resource.data.mid == request.auth.uid);
+    }
+
+    // جوائز الأثر البيئي: يمنحها رئيس النادي فقط، ويراها الأعضاء
+    match /awards/{id} {
+      allow read: if active();
+      allow write: if president();
+    }
+
+    match /routePhotos/{id} {
+      allow read: if active();
+      allow create: if active() && request.resource.data.by == request.auth.uid
+        && request.resource.data.photo is string && request.resource.data.photo.size() < 900000
+        && (staff() || (exists(/databases/$(database)/documents/routes/$(request.resource.data.route))
+            && get(/databases/$(database)/documents/routes/$(request.resource.data.route)).data.get('discoveredBy', '') == request.auth.uid));
+      allow delete: if staff() || (active() && resource.data.by == request.auth.uid);
+    }
+
+    match /routes/{id} {
+      allow read: if active();
+      allow create: if (staff() || (active() && request.resource.data.discoveredBy == request.auth.uid && feat('disc')))
+        && (!('doc' in request.resource.data) || president());
+      allow update: if president()
+        || (!('doc' in resource.data) && !('doc' in request.resource.data)
+            && (staff() || (active() && resource.data.discoveredBy == request.auth.uid
+                && request.resource.data.discoveredBy == request.auth.uid)));
+      allow delete: if president()
+        || (!('doc' in resource.data) && (staff() || (active() && resource.data.discoveredBy == request.auth.uid)));
+    }
+
+    // خلفيات النظام: يرفعها رئيس النادي ويراها الجميع
+    match /backgrounds/{id} {
+      allow read: if active();
+      allow write: if president();
+    }
+
+
+    // رابط الرحلة في المنشور: ملخص عام للرحلة يقرؤه أي أحد، ويكتبه المشرفون فقط
+    // لوحة النادي العامة (بطاقة النادي بالباركود): يقرؤها أي أحد بدون دخول، ويحررها الرئيس والمشرفون فقط
+    match /clubPub/{id} {
+      allow read: if true;
+      allow write: if staff();
+    }
+    match /clubMem/{id} {
+      allow read: if true;
+      allow create, update: if staff() && request.resource.data.thumb is string && request.resource.data.thumb.size() < 400000;
+      allow delete: if staff();
+    }
+    match /clubMemFull/{id} {
+      allow read: if true;
+      allow create, update: if staff() && request.resource.data.img is string && request.resource.data.img.size() < 900000;
+      allow delete: if staff();
+    }
+    match /tripPub/{id} {
+      allow read: if true;
+      allow write: if staff();
+    }
+    // تسجيل غير الأعضاء كضيوف عبر الرابط: إنشاء فقط ببيانات محددة، والقراءة والتعديل للمشرفين
+    // نموذج إخلاء المسؤولية الموقّع إلكترونيًا: يكتبه العضو لنفسه (مستند واحد لكل رحلة)، ويقرؤه هو والإدارة وقائد الرحلة وسّاقتها
+    match /waivers/{id} {
+      allow read: if staff() || (active() && (resource.data.by == request.auth.uid || request.auth.uid in resource.data.get('lead', [])));
+      allow create, update: if active() && request.resource.data.by == request.auth.uid
+        && id == request.resource.data.trip + '_' + request.auth.uid
+        && request.resource.data.keys().hasOnly(['trip', 'by', 'name', 'age', 'idNo', 'phone', 'emPhone', 'blood', 'sig', 'at', 'lead', 'wv', 'tt', 'td'])
+        && request.resource.data.trip is string && request.resource.data.trip.size() <= 60
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && request.resource.data.idNo is string && request.resource.data.idNo.size() <= 15
+        && request.resource.data.sig is string && request.resource.data.sig.size() < 60000
+        && request.resource.data.lead is list && request.resource.data.lead.size() <= 4;
+      // سجل التعهدات: ما يحذف التعهد الموقّع إلا الرئيس والمدير (v251)
+      allow delete: if president();
+    }
+    match /tripGuests/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['trip', 'name', 'phone', 'blood', 'em', 'emPhone', 'health', 'at', 'st', 'ok', 'age', 'idNo', 'sig', 'wv'])
+        && (!('sig' in request.resource.data) || (request.resource.data.sig is string && request.resource.data.sig.size() < 60000))
+        && (!('idNo' in request.resource.data) || (request.resource.data.idNo is string && request.resource.data.idNo.size() <= 15))
+        && request.resource.data.trip is string && request.resource.data.trip.size() <= 60
+        && exists(/databases/$(database)/documents/tripPub/$(request.resource.data.trip))
+        && get(/databases/$(database)/documents/tripPub/$(request.resource.data.trip)).data.open == true
+        && request.resource.data.name is string && request.resource.data.name.size() >= 3 && request.resource.data.name.size() <= 60
+        && request.resource.data.phone is string && request.resource.data.phone.matches('^[+]?[0-9]{9,15}$')
+        && request.resource.data.em is string && request.resource.data.em.size() >= 2 && request.resource.data.em.size() <= 60
+        && request.resource.data.emPhone is string && request.resource.data.emPhone.matches('^[+]?[0-9]{9,15}$')
+        && request.resource.data.blood is string && request.resource.data.blood.size() <= 4
+        && request.resource.data.health is string && request.resource.data.health.size() <= 200
+        && request.resource.data.at is number && request.resource.data.st == 'p' && request.resource.data.ok == true;
+      allow read: if staff();
+      // التوقيع ما يتغيّر بعد الإرسال، وحذف الضيف الموقّع للرئيس والمدير بس (v251)
+      allow update: if staff() && request.resource.data.get('sig', '') == resource.data.get('sig', '');
+      allow delete: if president() || (staff() && !('sig' in resource.data));
+    }
+
+    // رعاة النادي: يظهرون في شاشة الدخول قبل تسجيل الدخول، ولا يكتبهم إلا رئيس النادي
+    match /public/{id} {
+      allow read: if true;
+      allow write: if president();
+    }
+
+    match /settings/{id} {
+      allow read: if active();
+      allow write: if president();
+    }
+
+    // رموز أجهزة الأعضاء لإرسال الإشعارات، لا يقرؤها إلا صاحبها والخادم
+    match /tokens/{uid} {
+      allow read, write: if active() && request.auth.uid == uid;
+    }
+
+    // يسمح للعضو بإضافة أو حذف اسمه هو فقط من القائمة
+    function selfOnly(field) {
+      let before = resource.data.get(field, []).toSet();
+      let after = request.resource.data.get(field, []).toSet();
+      let added = after.difference(before);
+      let removed = before.difference(after);
+      return (added.size() == 0 || (added.size() == 1 && added.hasOnly([request.auth.uid])))
+          && (removed.size() == 0 || (removed.size() == 1 && removed.hasOnly([request.auth.uid])));
+    }
+    // العضو يرسل عذره هو فقط، وبحالة «بانتظار القرار»
+    function ownExcuse() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['excuses'])
+        || (request.resource.data.excuses.diff(resource.data.get('excuses', {})).affectedKeys().hasOnly([request.auth.uid])
+            && request.resource.data.excuses[request.auth.uid].st == 'p');
+    }
+    // رد العضو على إشعار الرحلة: انضمام أو اعتذار
+    // وصول العضو لنقطة التجمع: يسجّل وصوله هو فقط، ولازم يكون مسجّلًا في الرحلة
+    function memberHere() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['here'])
+        && (request.auth.uid in resource.data.get('participants', []) || request.auth.uid in resource.data.get('guests', {}))
+        && request.resource.data.here.diff(resource.data.get('here', {})).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.here[request.auth.uid] is number;
+    }
+    // قائد الرحلة أو مساعده يعلن اكتمال التجمع والتحضير
+    function leadGather() {
+      return (resource.data.get('leader', '') == request.auth.uid || resource.data.get('sweep', '') == request.auth.uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['gathered', 'gatheredBy', 'roll', 'offM', 'gat', 'gatNo', 'trailOk', 'trailBy', 'endedAt', 'endedBy']);
+    }
+    function memberResponse() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'declined', 'attended', 'excuses'])
+        && selfOnly('participants') && selfOnly('declined') && ownExcuse()
+        && request.resource.data.get('attended', []).toSet().difference(resource.data.get('attended', []).toSet()).size() == 0
+        && (request.resource.data.participants.size() <= resource.data.capacity
+            || request.resource.data.participants.size() < resource.data.participants.size());
+    }
+
+    // نداءات الاستغاثة: يراها كل الأعضاء، ينشئها العضو باسمه، ويضيف الأعضاء أسماءهم كمستجيبين، ويغلقها صاحبها أو الإدارة
+    match /sos/{id} {
+      allow read: if active();
+      allow create: if active() && request.resource.data.uid == request.auth.uid;
+      allow update: if active() && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['responders'])
+          || ((resource.data.uid == request.auth.uid || staff())
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'resolvedAt'])));
+      allow delete: if staff();
+    }
+
+    // مواقع الأعضاء أثناء الرحلة: يكتبها صاحبها فقط
+    match /presence/{uid} {
+      allow read: if active();
+      allow write: if active() && request.auth.uid == uid;
+    }
+
+    // إحصائيات المشي (المسافة والمدة) لتقدير مدة المسارات
+    match /walks/{id} {
+      allow read: if active();
+      allow create: if active() && request.resource.data.uid == request.auth.uid;
+      allow delete: if staff() || (active() && resource.data.uid == request.auth.uid);
+    }
+
+    match /trips/{id} {
+      allow read: if active();
+      allow create: if staff();
+      // الرحلة المُنهاة المعتمدة (final) لا يعدّلها ولا يحذفها إلا رئيس النادي
+      allow delete: if (staff() && !resource.data.get('final', false)) || president();
+      allow update: if (staff() && (!resource.data.get('final', false) || president())
+                        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['final', 'finalBy', 'finalAt']) || president()))
+        || (active() && !resource.data.get('final', false) && memberResponse())
+        || (active() && !resource.data.get('final', false) && (memberHere() || leadGather()))
+        // قائد الرحلة يسجّل الحضور ويرفع الرحلة للرئيس
+        || (active() && !resource.data.get('final', false) && resource.data.leader == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attended', 'attDone', 'closeBy', 'closeAt']));
+    }
+
+    // تقييم المسار وملاحظاته بعد الرحلة: يكتبه من حضر الرحلة فقط، ويراه كل الأعضاء
+    function attendedTrip(tripId) {
+      return request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.get('attended', []);
+    }
+    function validRating(id) {
+      return request.resource.data.by == request.auth.uid
+        && id == request.resource.data.trip + '_' + request.auth.uid
+        && request.resource.data.stars is int && request.resource.data.stars >= 1 && request.resource.data.stars <= 5
+        && request.resource.data.note is string && request.resource.data.note.size() <= 600
+        && attendedTrip(request.resource.data.trip);
+    }
+    match /reviews/{id} {
+      allow read: if active();
+      allow create, update: if active() && validRating(id);
+      allow delete: if staff() || (active() && resource.data.by == request.auth.uid);
+    }
+
+    // تقييم قائد الرحلة: سري، يقرؤه رئيس النادي فقط (والعضو يرى تقييمه هو)
+    match /leaderRatings/{id} {
+      allow read: if president() || (active() && resource.data.by == request.auth.uid);
+      allow create, update: if active() && validRating(id)
+        && request.resource.data.leader == get(/databases/$(database)/documents/trips/$(request.resource.data.trip)).data.leader
+        && request.resource.data.leader != request.auth.uid;
+      allow delete: if president();
+    }
+
+    match /checkins/{uid} {
+      allow read: if staff() || (active() && request.auth.uid == uid);
+      allow create, update: if active() && request.auth.uid == uid
+        && request.resource.data.uid == uid && request.resource.data.due is int
+        && request.resource.data.get('note', '').size() <= 120;
+      allow delete: if staff() || (active() && request.auth.uid == uid);
+    }
+    match /prayLoc/{uid} {
+      allow read: if staff() || (active() && request.auth.uid == uid);
+      allow create, update: if active() && request.auth.uid == uid
+        && request.resource.data.uid == uid && request.resource.data.on is bool;
+      allow delete: if staff() || (active() && request.auth.uid == uid);
+    }
+    match /marks/{id} {
+      allow read: if active();
+      allow create: if active() && request.resource.data.by == request.auth.uid
+        && request.resource.data.type in ['cov', 'poi']
+        && request.resource.data.lat is number && request.resource.data.lng is number
+        && request.resource.data.get('name', '').size() <= 60;
+      allow delete: if staff() || (active() && resource.data.by == request.auth.uid);
+    }
+    match /condReports/{id} {
+      allow read: if active();
+      allow create: if active() && request.resource.data.by == request.auth.uid
+        && request.resource.data.cond is string && request.resource.data.cond.size() <= 20
+        && request.resource.data.get('note', '').size() <= 200;
+      allow delete: if staff() || (active() && resource.data.by == request.auth.uid);
+    }
+    // بلاغات المحتوى: أي عضو يرسل بلاغًا باسمه، والإدارة وحدها تقرأ وتغلق
+    match /reports/{id} {
+      allow create: if active() && request.resource.data.by == request.auth.uid
+                    && request.resource.data.done == false
+                    && request.resource.data.note is string && request.resource.data.note.size() <= 500;
+      allow read, update, delete: if staff();
+    }
+      // ===== المحادثات (v246): شات النادي، وشات لكل رحلة، ورسائل خاصة بين عضوين =====
+    function chTrip(tid) {
+      let t = get(/databases/$(database)/documents/trips/$(tid)).data;
+      return request.auth.uid in t.get('participants', []) || t.get('leader', '') == request.auth.uid;
+    }
+    // مجلس الإدارة: قائمة مخفية، يحددها رئيس النادي والمدير، ولا يقرؤها إلا الرئيس وأعضاء المجلس
+    function onBoard() { return exists(/databases/$(database)/documents/board/$(request.auth.uid)); }
+    match /board/{uid} {
+      allow read: if president() || (active() && (request.auth.uid == uid || onBoard()));
+      allow create, update: if president() && request.resource.data.keys().hasOnly(['by', 'at']);
+      allow delete: if president();
+    }
+    function chRoom(room) {
+      return active() && (room == 'club'
+        || (room == 'board' && (president() || onBoard()))
+        || (room.matches('trip_[A-Za-z0-9-]+') && (staff() || chTrip(room.split('_')[1])))
+        || (room.matches('dm_[A-Za-z0-9]+_[A-Za-z0-9]+') && request.auth.uid in room.split('_')));
+    }
+    function chMetaPath(room) { return /databases/$(database)/documents/chats/$(room); }
+    function chCanPost(room) {
+      return staff() || room.matches('dm_.*') || !exists(chMetaPath(room))
+        || (!get(chMetaPath(room)).data.get('ann', false) && !(request.auth.uid in get(chMetaPath(room)).data.get('muted', [])));
+    }
+    match /chats/{room} {
+      allow read: if chRoom(room) || (active() && request.auth.uid in resource.data.get('members', []));
+      allow create: if chRoom(room)
+        && request.resource.data.keys().hasOnly(['last', 'members', 'type', 'ann', 'muted'])
+        && (!room.matches('dm_.*') || (request.resource.data.members.size() == 2
+              && request.resource.data.members.toSet() == [room.split('_')[1], room.split('_')[2]].toSet()))
+        && (staff() || (!request.resource.data.get('ann', false) && request.resource.data.get('muted', []).size() == 0));
+      allow update: if chRoom(room) && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'members', 'type'])
+          && request.resource.data.get('members', []) == resource.data.get('members', [])
+          || (staff() && !room.matches('dm_.*')
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'ann', 'muted'])));
+      match /msgs/{id} {
+        allow read: if chRoom(room);
+        allow create: if chRoom(room) && chCanPost(room)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'role', 'txt', 't', 'reply', 'loc', 're', 'del'])
+          && request.resource.data.txt is string && request.resource.data.txt.size() <= 1000
+          && request.resource.data.name is string && request.resource.data.name.size() <= 80
+          && request.resource.data.t is number
+          && request.resource.data.get('role', '') == me().get('role', 'member')
+          && request.resource.data.get('del', false) == false;
+        allow update: if chRoom(room) && (
+            (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['re']) && request.resource.data.re.size() <= 6)
+            || ((resource.data.uid == request.auth.uid || (staff() && !room.matches('dm_.*')))
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['del', 'txt', 'loc', 'reply', 're'])
+                && request.resource.data.del == true && request.resource.data.txt == ''));
+        allow delete: if staff() && !room.matches('dm_.*');
+      }
+    }
+  }
+}
