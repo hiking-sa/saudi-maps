@@ -1,0 +1,93 @@
+name: تجهيز طبقة التضاريس (كنتور وتظليل)
+on:
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: "المناطق (مفصولة بمسافة)"
+        default: "asir baha"
+  push:
+    paths: ['.github/workflows/terrain.yml', 'scripts/cop_tiles.py', 'scripts/index_terrain.py']
+concurrency: { group: terrain, cancel-in-progress: true }
+permissions: { contents: write }
+jobs:
+  terrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      REGIONS: ${{ github.event.inputs.regions || 'asir baha' }}
+      GDAL_DISABLE_READDIR_ON_OPEN: EMPTY_DIR
+      CPL_VSIL_CURL_ALLOWED_EXTENSIONS: .tif
+      GDAL_HTTP_MAX_RETRY: "5"
+      GDAL_HTTP_RETRY_DELAY: "3"
+    steps:
+      - uses: actions/checkout@v4
+      - name: تجهيز الأدوات
+        run: |
+          set -o pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq gdal-bin osmium-tool jq build-essential libsqlite3-dev zlib1g-dev >/dev/null
+          pip install -q rasterio rio-rgbify mercantile 2>&1 | tail -2
+          git clone -q --depth 1 https://github.com/felt/tippecanoe.git /tmp/tc && make -s -C /tmp/tc -j4 >/dev/null 2>&1 && sudo make -s -C /tmp/tc install >/dev/null
+          U=$(curl -s https://api.github.com/repos/protomaps/go-pmtiles/releases/latest | jq -r '.assets[]|select(.name|test("Linux_x86_64"))|.browser_download_url')
+          curl -sSL "$U" | tar xz pmtiles
+          gdalinfo --version; tippecanoe -v 2>&1 | head -1; rio rgbify --help | head -3
+          EP="${{ secrets.R2_ENDPOINT }}"; EP=$(echo "$EP" | tr -d '[:space:]'); EP=${EP%/}; EP=${EP%/saudi-maps}; echo "EP=$EP" >> $GITHUB_ENV
+      - name: حدود المناطق
+        run: |
+          curl -fsSL --retry 5 -o gcc.osm.pbf https://download.geofabrik.de/asia/gcc-states-latest.osm.pbf
+          osmium tags-filter gcc.osm.pbf r/boundary=administrative -o adm.osm.pbf
+          osmium export adm.osm.pbf -f geojsonseq --geometry-types=polygon -o adm.geojsonseq
+          python3 scripts/regions.py adm.geojsonseq regions | tee build.log
+          rm -f gcc.osm.pbf adm.osm.pbf
+          curl -fsSL --retry 5 -o tileList.txt https://copernicus-dem-30m.s3.amazonaws.com/tileList.txt
+      - name: بناء التضاريس
+        run: |
+          set -eo pipefail
+          mkdir -p out
+          for k in $REGIONS; do
+            echo "== $k" | tee -a build.log
+            python3 scripts/cop_tiles.py regions/$k.geojson tileList.txt > $k.list
+            echo "ملفات الارتفاع: $(wc -l < $k.list)" | tee -a build.log
+            gdalbuildvrt -q -input_file_list $k.list $k.vrt
+            read W S E N < bbox.txt
+            gdalwarp -q -overwrite -te $W $S $E $N -cutline regions/$k.geojson -crop_to_cutline -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi $k.vrt $k-dem.tif 2>&1 | tail -3
+            # الكنتور: كل 20 متر، والخط الرئيسي كل 100 متر
+            gdal_contour -q -a ele -i 20 -f GeoJSONSeq $k-dem.tif $k-c.geojsonseq
+            python3 -c "
+          import json,sys
+          o=open('$k-c2.geojsonseq','w')
+          for l in open('$k-c.geojsonseq'):
+              l=l.strip().lstrip('\x1e')
+              if not l: continue
+              f=json.loads(l); e=int(round(f['properties']['ele'])); f['properties']={'ele':e,'idx':1 if e%100==0 else 0}; o.write(json.dumps(f)+'\n')"
+            rm $k-c.geojsonseq
+            tippecanoe -q -o $k-contours.pmtiles -l contour -Z10 -z14 --force --no-tile-size-limit --simplification=6 \
+              -j '{"contour":["any",[">=","$zoom",13],["==","idx",1]]}' -P $k-c2.geojsonseq
+            rm $k-c2.geojsonseq
+            # التظليل: صور ارتفاعات بترميز terrain-rgb للمستوى 12
+            gdalwarp -q -overwrite -t_srs EPSG:3857 -r bilinear -dstnodata 0 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi $k-dem.tif $k-3857.tif
+            rio rgbify -b -10000 -i 0.1 --min-z 6 --max-z 12 -j 4 --format png $k-3857.tif $k-dem.mbtiles
+            ./pmtiles convert $k-dem.mbtiles out/$k-dem.pmtiles
+            mv $k-contours.pmtiles out/
+            rm -f $k-dem.tif $k-3857.tif $k-dem.mbtiles $k.vrt
+            ls -lh out | tee -a build.log
+          done
+      - name: الرفع على مخزن التطبيق (R2)
+        run: |
+          set -o pipefail
+          aws s3 cp s3://saudi-maps/index.json index.json --endpoint-url "$EP"
+          for f in out/*.pmtiles; do
+            aws s3 cp "$f" "s3://saudi-maps/terrain/$(basename $f)" --endpoint-url "$EP" --content-type application/octet-stream --only-show-errors
+          done
+          python3 scripts/index_terrain.py index.json out | tee -a build.log
+          aws s3 cp index.json s3://saudi-maps/index.json --endpoint-url "$EP" --content-type "application/json; charset=utf-8" --cache-control "max-age=3600"
+          cp index.json index.public.json
+      - name: حفظ السجل
+        if: always()
+        run: |
+          mkdir -p /tmp/lg && cp *.log index.public.json /tmp/lg/ 2>/dev/null || true
+          echo "${{ job.status }} $(date -u +%FT%TZ)" > /tmp/lg/status.txt; df -h / >> /tmp/lg/status.txt
+          cd /tmp/lg && git init -q && git checkout -q -b logs-terrain && git add -A && git -c user.name=bot -c user.email=bot@x commit -qm log
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" logs-terrain
