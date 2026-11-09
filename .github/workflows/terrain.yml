@@ -45,12 +45,14 @@ jobs:
       - name: بناء التضاريس
         run: |
           set -eo pipefail
+          exec > >(tee -a build.log) 2>&1
+          set -x
           mkdir -p out
           for k in $REGIONS; do
             echo "== $k" | tee -a build.log
             python3 scripts/cop_tiles.py regions/$k.geojson tileList.txt > $k.list
             echo "ملفات الارتفاع: $(wc -l < $k.list)" | tee -a build.log
-            gdalbuildvrt -q -input_file_list $k.list $k.vrt
+            gdalbuildvrt -input_file_list $k.list $k.vrt
             read W S E N < bbox.txt
             gdalwarp -q -overwrite -te $W $S $E $N -cutline regions/$k.geojson -crop_to_cutline -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi $k.vrt $k-dem.tif 2>&1 | tail -3
             # الكنتور: كل 20 متر، والخط الرئيسي كل 100 متر
