@@ -22,64 +22,54 @@ jobs:
       REGIONS: ${{ github.event.inputs.regions || (github.event_name == 'push' && 'asir') || 'all' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: "21" }
       - name: تجهيز الأدوات
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
-          df -h / | tail -1
           sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool jq >/dev/null
-          curl -sSL -o planetiler.jar https://github.com/onthegomap/planetiler/releases/latest/download/planetiler.jar
           U=$(curl -s https://api.github.com/repos/protomaps/go-pmtiles/releases/latest | jq -r '.assets[]|select(.name|test("Linux_x86_64"))|.browser_download_url')
           curl -sSL "$U" | tar xz pmtiles && ./pmtiles version || true
           EP="${{ secrets.R2_ENDPOINT }}"; EP=$(echo "$EP" | tr -d '[:space:]'); EP=${EP%/}; EP=${EP%/saudi-maps}; echo "EP=$EP" >> $GITHUB_ENV
-      - name: تحميل بيانات OpenStreetMap (دول الخليج)
-        run: |
-          curl -sSL -o gcc.osm.pbf https://download.geofabrik.de/asia/gcc-states-latest.osm.pbf
-          ls -lh gcc.osm.pbf
-      - uses: actions/cache@v4
-        with: { path: data/sources, key: "sources-${{ github.run_id }}", restore-keys: "sources-" }
-      - name: تحميل مصادر البحار والأنهار
-        run: |
-          mkdir -p data/sources && cd data/sources
-          get(){ [ -s "$1" ] && return 0; for i in 1 2 3 4 5 6; do curl -fSL --connect-timeout 60 --max-time 1800 -o "$1.part" "$2" && mv "$1.part" "$1" && return 0; echo "إعادة المحاولة $i"; sleep 30; done; return 1; }
-          get water-polygons-split-3857.zip https://osmdata.openstreetmap.de/download/water-polygons-split-3857.zip
-          get natural_earth_vector.sqlite.zip https://naciscdn.org/naturalearth/packages/natural_earth_vector.sqlite.zip
-          get lake_centerline.shp.zip https://github.com/acalcutt/osm-lakelines/releases/download/v12/lake_centerline.shp.zip
-          ls -lh
-      - name: حدود المناطق
-        run: |
-          osmium tags-filter gcc.osm.pbf r/boundary=administrative -o adm.osm.pbf
-          osmium export adm.osm.pbf -f geojsonseq --geometry-types=polygon -o adm.geojsonseq
-          python3 scripts/regions.py adm.geojsonseq regions
-      - name: بناء خريطة السعودية كاملة
+      - name: حدود المناطق (من OpenStreetMap)
         run: |
           set -o pipefail
-          java -Xmx12g -jar planetiler.jar --osm-path=gcc.osm.pbf --output=saudi.pmtiles \
-            --bounds=34.4,16.2,55.8,32.3 --maxzoom=14 --languages=ar,en --force 2>&1 | tee build.log
-          ls -lh saudi.pmtiles
-      - name: تقسيم المناطق
+          curl -fsSL --retry 5 -o gcc.osm.pbf https://download.geofabrik.de/asia/gcc-states-latest.osm.pbf
+          osmium tags-filter gcc.osm.pbf r/boundary=administrative -o adm.osm.pbf
+          osmium export adm.osm.pbf -f geojsonseq --geometry-types=polygon -o adm.geojsonseq
+          python3 scripts/regions.py adm.geojsonseq regions 2>&1 | tee build.log
+          rm -f gcc.osm.pbf adm.osm.pbf adm.geojsonseq
+      - name: أحدث نسخة من خريطة العالم (OpenStreetMap)
         run: |
+          set -o pipefail
+          B=$(curl -fsSL --retry 5 https://build-metadata.protomaps.dev/builds.json | jq -r '[.[]|select(.key|test("^[0-9]{8}\\.pmtiles$"))]|sort_by(.key)|last|.key')
+          echo "SRC=https://build.protomaps.com/$B" >> $GITHUB_ENV; echo "BUILD=${B%.pmtiles}" >> $GITHUB_ENV
+          echo "المصدر: $B" | tee -a build.log
+          ./pmtiles show "https://build.protomaps.com/$B" 2>&1 | head -20 | tee -a build.log
+      - name: قص المناطق
+        run: |
+          set -o pipefail
           mkdir -p out
           if [ "$REGIONS" = "all" ]; then L=$(jq -r '.[].key' regions/_list.json); else L="$REGIONS"; fi
-          for k in $L; do ./pmtiles extract saudi.pmtiles out/$k.pmtiles --region=regions/$k.geojson; done
-          ls -lh out
+          for k in $L; do
+            echo "== $k" | tee -a build.log
+            ./pmtiles extract "$SRC" out/$k.pmtiles --region=regions/$k.geojson --download-threads=8 2>&1 | tail -5 | tee -a build.log
+          done
+          ls -lh out | tee -a build.log
       - name: الرفع على مخزن التطبيق (R2)
         run: |
+          set -o pipefail
           aws s3 cp s3://saudi-maps/index.json old-index.json --endpoint-url "$EP" || echo '{}' > old-index.json
           for f in out/*.pmtiles; do
-            aws s3 cp "$f" "s3://saudi-maps/regions/$(basename $f)" --endpoint-url "$EP" --content-type application/octet-stream
+            aws s3 cp "$f" "s3://saudi-maps/regions/$(basename $f)" --endpoint-url "$EP" --content-type application/octet-stream --only-show-errors
           done
-          python3 scripts/index.py old-index.json regions out
+          python3 scripts/index.py old-index.json regions out "$BUILD" | tee -a build.log
           aws s3 cp index.json s3://saudi-maps/index.json --endpoint-url "$EP" --content-type "application/json; charset=utf-8" --cache-control "max-age=3600"
           aws s3 rm s3://saudi-maps/test/hello.txt --endpoint-url "$EP" || true
+          cp index.json index.public.json
           echo "## ✅ الخرائط جاهزة" >> $GITHUB_STEP_SUMMARY
           jq -r '.regions|to_entries[]|"- \(.value.name): \((.value.size/1048576*10|floor)/10) م.ب"' index.json >> $GITHUB_STEP_SUMMARY
       - name: حفظ السجل
         if: always()
         run: |
-          mkdir -p /tmp/lg && cp *.log /tmp/lg/ 2>/dev/null || true
-          echo "${{ job.status }} $(date -u +%FT%TZ)" > /tmp/lg/status.txt; df -h / >> /tmp/lg/status.txt; free -g >> /tmp/lg/status.txt
-          cd /tmp/lg && for f in *.log; do [ -f "$f" ] && tail -300 "$f" > "t-$f"; done; rm -f build.log
-          git init -q && git checkout -q -b logs && git add -A && git -c user.name=bot -c user.email=bot@x commit -qm log
+          mkdir -p /tmp/lg && cp *.log index.public.json /tmp/lg/ 2>/dev/null || true
+          echo "${{ job.status }} $(date -u +%FT%TZ)" > /tmp/lg/status.txt; df -h / >> /tmp/lg/status.txt
+          cd /tmp/lg && git init -q && git checkout -q -b logs && git add -A && git -c user.name=bot -c user.email=bot@x commit -qm log
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" logs
