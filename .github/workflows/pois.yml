@@ -1,0 +1,81 @@
+name: تجهيز ملفات الأماكن
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/pois.yml', 'scripts/pois.py', 'scripts/index_pois.py']
+  schedule:
+    - cron: "41 3 4 * *"   # كل شهر يوم 4
+concurrency: { group: pois, cancel-in-progress: true }
+permissions: { contents: write }
+jobs:
+  pois:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+    steps:
+      - uses: actions/checkout@v4
+      - name: الأدوات
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool jq >/dev/null
+          pip install -q --break-system-packages shapely duckdb 2>&1 | tail -1 || pip install -q shapely duckdb
+          EP="${{ secrets.R2_ENDPOINT }}"; EP=$(echo "$EP" | tr -d '[:space:]'); EP=${EP%/}; EP=${EP%/saudi-maps}; echo "EP=$EP" >> $GITHUB_ENV
+      - name: بيانات OpenStreetMap
+        run: |
+          set -eo pipefail
+          exec > >(tee -a build.log) 2>&1
+          curl -fsSL --retry 5 -o gcc.osm.pbf https://download.geofabrik.de/asia/gcc-states-latest.osm.pbf
+          osmium tags-filter gcc.osm.pbf r/boundary=administrative -o adm.osm.pbf
+          osmium export adm.osm.pbf -f geojsonseq --geometry-types=polygon -o adm.geojsonseq
+          python3 scripts/regions.py adm.geojsonseq regions
+          osmium tags-filter gcc.osm.pbf nwr/amenity=place_of_worship,drinking_water,water_point,toilets,parking,fuel,charging_station,hospital,clinic,doctors,pharmacy,restaurant,cafe,fast_food,food_court,shelter nwr/shop=supermarket,convenience,bakery,greengrocer nwr/natural=spring,peak nwr/tourism=viewpoint,picnic_site,camp_site,hotel,motel,guest_house,chalet,resort nwr/leisure=park nwr/man_made=water_well -o poi.osm.pbf
+          osmium export poi.osm.pbf -f geojsonseq -o osm.geojsonseq
+          wc -l osm.geojsonseq
+      - name: بيانات Overture Maps
+        continue-on-error: true
+        run: |
+          exec > >(tee -a build.log) 2>&1
+          REL=$(aws s3 ls s3://overturemaps-us-west-2/release/ --no-sign-request | awk '{print $2}' | sed 's#/##' | sort | tail -1)
+          echo "Overture release: $REL"
+          python3 - <<PY
+          import duckdb
+          c=duckdb.connect()
+          c.execute("INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2';")
+          q="""COPY (SELECT names.primary AS name,
+                 COALESCE(TRY(element_at(names.common,'ar')[1]),'') AS name_ar,
+                 categories.primary AS cat,
+                 (bbox.xmin+bbox.xmax)/2 AS lon,(bbox.ymin+bbox.ymax)/2 AS lat
+               FROM read_parquet('s3://overturemaps-us-west-2/release/$REL/theme=places/type=place/*', hive_partitioning=1)
+               WHERE bbox.xmin BETWEEN 34.4 AND 55.8 AND bbox.ymin BETWEEN 16.2 AND 32.3 AND COALESCE(confidence,1) >= 0.6)
+             TO 'ov.csv' (HEADER, DELIMITER ',')"""
+          c.execute(q)
+          print(c.execute("SELECT count(*) FROM read_csv_auto('ov.csv')").fetchone())
+          PY
+          ls -lh ov.csv || true
+      - name: ملفات الأماكن لكل منطقة
+        run: |
+          set -eo pipefail
+          exec > >(tee -a build.log) 2>&1
+          python3 scripts/pois.py regions osm.geojsonseq ov.csv out/pois
+          ls -lh out/pois
+      - name: الرفع على مخزن التطبيق (R2)
+        run: |
+          set -o pipefail
+          exec > >(tee -a build.log) 2>&1
+          aws s3 cp s3://saudi-maps/index.json index.json --endpoint-url "$EP"
+          for f in out/pois/*.json; do case "$f" in */_*) continue;; esac
+            aws s3 cp "$f" "s3://saudi-maps/pois/$(basename $f)" --endpoint-url "$EP" --content-type "application/json; charset=utf-8" --only-show-errors; done
+          python3 scripts/index_pois.py index.json out/pois
+          aws s3 cp index.json s3://saudi-maps/index.json --endpoint-url "$EP" --content-type "application/json; charset=utf-8" --cache-control "max-age=600"
+          cp index.json index.public.json
+      - name: عينة وسجل
+        if: always()
+        run: |
+          mkdir -p /tmp/lg && cp build.log index.public.json /tmp/lg/ 2>/dev/null || true
+          [ -f out/pois/baha.json ] && cp out/pois/baha.json /tmp/lg/ || true
+          [ -f out/pois/makkah.json ] && python3 -c "import json;d=json.load(open('out/pois/makkah.json'));d['p']=[p for p in d['p'] if 21.4<p[1]<21.7 and 39.1<p[2]<39.3];json.dump(d,open('/tmp/lg/jeddah.json','w'),ensure_ascii=False)" || true
+          echo "${{ job.status }}" > /tmp/lg/status.txt
+          cd /tmp/lg && git init -q && git checkout -q -b logs-pois && git add -A && git -c user.name=bot -c user.email=bot@x commit -qm log
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" logs-pois
