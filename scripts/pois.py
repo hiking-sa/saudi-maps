@@ -55,6 +55,7 @@ def centroid(geom):
     xs = [p[0] for p in ring]; ys = [p[1] for p in ring]
     return sum(ys) / len(ys), sum(xs) / len(xs)
 no = 0
+SEEN = set()
 for line in open(osmf, encoding="utf-8"):
     line = line.strip().lstrip("\x1e")
     if not line: continue
@@ -67,6 +68,9 @@ for line in open(osmf, encoding="utf-8"):
     if not r: continue
     name = t.get("name:ar") or t.get("name") or ""
     if k == "peak" and t.get("ele"): name = (name + " · " if name else "") + str(t.get("ele")).split(".")[0] + " م"
+    key = (k, round(c[0], 4), round(c[1], 4))
+    if key in SEEN: continue
+    SEEN.add(key)
     P[r].append([k, round(c[0], 5), round(c[1], 5), name[:60], 0]); no += 1
 nv = 0
 if os.path.exists(ovf):
