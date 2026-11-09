@@ -10,6 +10,7 @@ on:
   schedule:
     - cron: "17 2 3 * *"   # كل شهر يوم 3 الساعة 5:17 الفجر بتوقيت السعودية
 concurrency: { group: maps, cancel-in-progress: true }
+permissions: { contents: write }
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -43,8 +44,9 @@ jobs:
           python3 scripts/regions.py adm.geojsonseq regions
       - name: بناء خريطة السعودية كاملة
         run: |
+          set -o pipefail
           java -Xmx12g -jar planetiler.jar --osm-path=gcc.osm.pbf --output=saudi.pmtiles --download \
-            --bounds=34.4,16.2,55.8,32.3 --maxzoom=14 --languages=ar,en --force
+            --bounds=34.4,16.2,55.8,32.3 --maxzoom=14 --languages=ar,en --force 2>&1 | tee build.log
           ls -lh saudi.pmtiles
       - name: تقسيم المناطق
         run: |
@@ -63,3 +65,11 @@ jobs:
           aws s3 rm s3://saudi-maps/test/hello.txt --endpoint-url "$EP" || true
           echo "## ✅ الخرائط جاهزة" >> $GITHUB_STEP_SUMMARY
           jq -r '.regions|to_entries[]|"- \(.value.name): \((.value.size/1048576*10|floor)/10) م.ب"' index.json >> $GITHUB_STEP_SUMMARY
+      - name: حفظ السجل
+        if: always()
+        run: |
+          mkdir -p /tmp/lg && cp *.log /tmp/lg/ 2>/dev/null || true
+          echo "${{ job.status }} $(date -u +%FT%TZ)" > /tmp/lg/status.txt; df -h / >> /tmp/lg/status.txt; free -g >> /tmp/lg/status.txt
+          cd /tmp/lg && for f in *.log; do [ -f "$f" ] && tail -300 "$f" > "t-$f"; done; rm -f build.log
+          git init -q && git checkout -q -b logs && git add -A && git -c user.name=bot -c user.email=bot@x commit -qm log
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" logs
