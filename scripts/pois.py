@@ -33,18 +33,18 @@ def osm_kind(t):
 def ov_kind(c):
     c = (c or "").lower()
     if not c: return None
-    if "mosque" in c or c == "islamic_place_of_worship": return "pray"
+    if "mosque" in c or "muslim_place_of_worship" in c or c == "islamic_place_of_worship": return "pray"
     if "gas_station" in c or "fuel" in c or "ev_charging" in c: return "fuel"
-    if "pharmacy" in c or "drugstore" in c: return "pharm"
-    if "hospital" in c or "clinic" in c or "medical_center" in c or "emergency_room" in c or "urgent_care" in c: return "hosp"
-    if any(w in c for w in ("restaurant", "cafe", "coffee", "bakery", "food", "burger", "pizza", "shawarma", "sandwich", "juice", "tea_room", "dessert")): return "food"
-    if any(w in c for w in ("supermarket", "grocery", "convenience_store", "hypermarket")): return "shop"
-    if c in ("parking", "parking_lot") or "parking" in c: return "park"
+    if "pharmacy" in c or "drugstore" in c or "drug_store" in c: return "pharm"
+    if "hospital" in c or "clinic" in c or "medical_center" in c or "emergency_room" in c or "urgent_care" in c or "health_center" in c: return "hosp"
+    if any(w in c for w in ("supermarket", "grocery", "convenience_store", "hypermarket", "food_and_beverage_store", "food_store")): return "shop"
+    if any(w in c for w in ("restaurant", "cafe", "coffee", "bakery", "eatery", "burger", "pizza", "shawarma", "sandwich", "juice", "tea_room", "dessert", "fast_food")): return "food"
+    if "parking" in c: return "park"
     if "toilet" in c or "restroom" in c: return "wc"
     if "drinking_water" in c or c == "water_well": return "water"
     if "scenic" in c or "lookout" in c or "viewpoint" in c: return "view"
-    if c in ("park", "national_park", "picnic_area", "campground", "rest_area", "rest_stop") or "picnic" in c: return "rest"
-    if c in ("hotel", "resort", "motel", "chalet", "guest_house", "holiday_rental_home") : return "hotel"
+    if c in ("park", "national_park", "picnic_area", "campground", "rest_area", "rest_stop", "nature_reserve") or "picnic" in c: return "rest"
+    if c in ("hotel", "resort", "motel", "chalet", "guest_house", "holiday_rental_home", "inn", "lodge") or c.endswith("_hotel"): return "hotel"
     return None
 P = {k: [] for k in R}
 def centroid(geom):
