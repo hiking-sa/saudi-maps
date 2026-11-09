@@ -3,7 +3,8 @@ import json, sys, os, hashlib, datetime
 old, regdir, outdir = sys.argv[1], sys.argv[2], sys.argv[3]
 build = sys.argv[4] if len(sys.argv) > 4 else ""
 try: idx = json.load(open(old, encoding="utf-8"))
-except Exception: idx = {"v": 1, "regions": {}}
+except Exception: idx = {}
+idx.setdefault("v", 1); idx.setdefault("regions", {})
 meta = {r["key"]: r for r in json.load(open(f"{regdir}/_list.json", encoding="utf-8"))}
 today = datetime.date.today().isoformat()
 for fn in sorted(os.listdir(outdir)):
