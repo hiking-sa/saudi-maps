@@ -1,0 +1,613 @@
+المناطق: 13 ['asir', 'baha', 'eastern', 'hail', 'jazan', 'jouf', 'madinah', 'makkah', 'najran', 'northern-borders', 'qassim', 'riyadh', 'tabuk']
++ mkdir -p out
++ for k in $REGIONS
++ echo '== asir'
++ tee -a build.log
+== asir
+== asir
++ python3 scripts/cop_tiles.py regions/asir.geojson tileList.txt
++ tee -a build.log
+++ wc -l
++ echo 'ملفات الارتفاع: 16'
+ملفات الارتفاع: 16
+ملفات الارتفاع: 16
++ gdalbuildvrt -input_file_list asir.list asir.vrt
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:00:07.
++ read W S E N
++ gdalwarp -q -overwrite -te 41.315715100000006 17.3166667 44.537299999999995 20.8526601 -cutline regions/asir.geojson -crop_to_cutline -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi asir.vrt asir-dem.tif
++ tail -3
++ gdal_contour -q -a ele -i 20 -f GeoJSONSeq asir-dem.tif asir-c.geojsonseq
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:01:16.
++ python3 -c $'\nimport json,sys\no=open(\'asir-c2.geojsonseq\',\'w\')\nfor l in open(\'asir-c.geojsonseq\'):\n    l=l.strip().lstrip(\'\\x1e\')\n    if not l: continue\n    f=json.loads(l); e=int(round(f[\'properties\'][\'ele\'])); f[\'properties\']={\'ele\':e,\'idx\':1 if e%100==0 else 0}; o.write(json.dumps(f)+\'\\n\')'
++ rm asir-c.geojsonseq
++ tippecanoe -q -o asir-contours.pmtiles -l contour -Z10 -z13 --force --no-tile-size-limit --simplification=8 -j '{"contour":["any",[">=","$zoom",12],["==","idx",1]]}' -P asir-c2.geojsonseq
++ rm asir-c2.geojsonseq
++ gdalwarp -q -overwrite -t_srs EPSG:3857 -r bilinear -srcnodata -32768 -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi asir-dem.tif asir-3857.tif
++ /usr/bin/python3 scripts/rgb.py asir-3857.tif asir-rgb.tif
+/usr/lib/python3/dist-packages/osgeo/gdal.py:606: FutureWarning: Neither gdal.UseExceptions() nor gdal.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+rgb ok 10884 12680
+++ which gdal2tiles.py
++ G2T=/usr/bin/gdal2tiles.py
++ /usr/bin/python3 /usr/bin/gdal2tiles.py --xyz -z 6-11 -r near -w none --processes=4 -q asir-rgb.tif t-asir
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
++ /usr/bin/python3 scripts/dir2mbtiles.py t-asir asir-dem.mbtiles asir-dem
+tiles 581 zooms 6 11
++ rm -rf t-asir asir-rgb.tif
++ ./pmtiles convert asir-dem.mbtiles out/asir-dem.pmtiles
+2026/11/09 15:06:33 convert.go:158: Pass 1: Assembling TileID set
+2026/11/09 15:06:33 convert.go:189: Pass 2: writing tiles
+   0% |                                              | (0/581, 0 it/hr) [0s:0s]                                                                                 40% |████████████████                          | (236/581, 3603 it/s) [0s:0s]                                                                                 77% |████████████████████████████████          | (448/581, 3425 it/s) [0s:0s]                                                                                100% |██████████████████████████████████████████| (581/581, 3465 it/s)
+2026/11/09 15:06:33 convert.go:243: # of addressed tiles:  581
+2026/11/09 15:06:33 convert.go:244: # of tile entries (after RLE):  495
+2026/11/09 15:06:33 convert.go:245: # of tile contents:  412
+2026/11/09 15:06:33 convert.go:268: Total dir bytes:  1688
+2026/11/09 15:06:33 convert.go:269: Average bytes per addressed tile: 2.91
+2026/11/09 15:06:33 convert.go:238: Finished in  187.240013ms
++ mv asir-contours.pmtiles out/
++ rm -f asir-dem.tif asir-3857.tif asir-dem.mbtiles asir.vrt
++ ls -lh out
++ tee -a build.log
+total 75M
+-rw-r--r-- 1 runner runner 46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner 30M Nov  9 15:06 asir-dem.pmtiles
+total 75M
+-rw-r--r-- 1 runner runner 46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner 30M Nov  9 15:06 asir-dem.pmtiles
++ for k in $REGIONS
++ echo '== baha'
++ tee -a build.log
+== baha
+== baha
++ python3 scripts/cop_tiles.py regions/baha.geojson tileList.txt
++ tee -a build.log
+++ wc -l
++ echo 'ملفات الارتفاع: 6'
+ملفات الارتفاع: 6
+ملفات الارتفاع: 6
++ gdalbuildvrt -input_file_list baha.list baha.vrt
+0...10...20...30...40...50...60...70...80...90...100 - done.
++ read W S E N
++ gdalwarp -q -overwrite -te 40.78591 19.391880099999998 42.180049999999994 20.879380100000002 -cutline regions/baha.geojson -crop_to_cutline -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi baha.vrt baha-dem.tif
++ tail -3
++ gdal_contour -q -a ele -i 20 -f GeoJSONSeq baha-dem.tif baha-c.geojsonseq
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:00:14.
++ python3 -c $'\nimport json,sys\no=open(\'baha-c2.geojsonseq\',\'w\')\nfor l in open(\'baha-c.geojsonseq\'):\n    l=l.strip().lstrip(\'\\x1e\')\n    if not l: continue\n    f=json.loads(l); e=int(round(f[\'properties\'][\'ele\'])); f[\'properties\']={\'ele\':e,\'idx\':1 if e%100==0 else 0}; o.write(json.dumps(f)+\'\\n\')'
++ rm baha-c.geojsonseq
++ tippecanoe -q -o baha-contours.pmtiles -l contour -Z10 -z13 --force --no-tile-size-limit --simplification=8 -j '{"contour":["any",[">=","$zoom",12],["==","idx",1]]}' -P baha-c2.geojsonseq
++ rm baha-c2.geojsonseq
++ gdalwarp -q -overwrite -t_srs EPSG:3857 -r bilinear -srcnodata -32768 -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi baha-dem.tif baha-3857.tif
++ /usr/bin/python3 scripts/rgb.py baha-3857.tif baha-rgb.tif
+/usr/lib/python3/dist-packages/osgeo/gdal.py:606: FutureWarning: Neither gdal.UseExceptions() nor gdal.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+rgb ok 4499 5138
+++ which gdal2tiles.py
++ G2T=/usr/bin/gdal2tiles.py
++ /usr/bin/python3 /usr/bin/gdal2tiles.py --xyz -z 6-11 -r near -w none --processes=4 -q baha-rgb.tif t-baha
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
++ /usr/bin/python3 scripts/dir2mbtiles.py t-baha baha-dem.mbtiles baha-dem
+tiles 110 zooms 6 11
++ rm -rf t-baha baha-rgb.tif
++ ./pmtiles convert baha-dem.mbtiles out/baha-dem.pmtiles
+2026/11/09 15:07:25 convert.go:158: Pass 1: Assembling TileID set
+2026/11/09 15:07:25 convert.go:189: Pass 2: writing tiles
+   0% |                                              | (0/110, 0 it/hr) [0s:0s]                                                                                100% |██████████████████████████████████████████| (110/110, 3881 it/s)
+2026/11/09 15:07:25 convert.go:243: # of addressed tiles:  110
+2026/11/09 15:07:25 convert.go:244: # of tile entries (after RLE):  104
+2026/11/09 15:07:25 convert.go:245: # of tile contents:  89
+2026/11/09 15:07:25 convert.go:268: Total dir bytes:  443
+2026/11/09 15:07:25 convert.go:269: Average bytes per addressed tile: 4.03
+2026/11/09 15:07:25 convert.go:238: Finished in  33.107797ms
++ mv baha-contours.pmtiles out/
++ rm -f baha-dem.tif baha-3857.tif baha-dem.mbtiles baha.vrt
++ ls -lh out
++ tee -a build.log
+total 89M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+total 89M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
++ for k in $REGIONS
++ echo '== makkah'
++ tee -a build.log
+== makkah
+== makkah
++ python3 scripts/cop_tiles.py regions/makkah.geojson tileList.txt
++ tee -a build.log
+++ wc -l
++ echo 'ملفات الارتفاع: 34'
+ملفات الارتفاع: 34
+ملفات الارتفاع: 34
++ gdalbuildvrt -input_file_list makkah.list makkah.vrt
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:00:14.
++ read W S E N
++ gdalwarp -q -overwrite -te 38.609766900000004 18.23122 43.88016 23.7452001 -cutline regions/makkah.geojson -crop_to_cutline -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi makkah.vrt makkah-dem.tif
++ tail -3
++ gdal_contour -q -a ele -i 20 -f GeoJSONSeq makkah-dem.tif makkah-c.geojsonseq
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:01:19.
++ python3 -c $'\nimport json,sys\no=open(\'makkah-c2.geojsonseq\',\'w\')\nfor l in open(\'makkah-c.geojsonseq\'):\n    l=l.strip().lstrip(\'\\x1e\')\n    if not l: continue\n    f=json.loads(l); e=int(round(f[\'properties\'][\'ele\'])); f[\'properties\']={\'ele\':e,\'idx\':1 if e%100==0 else 0}; o.write(json.dumps(f)+\'\\n\')'
++ rm makkah-c.geojsonseq
++ tippecanoe -q -o makkah-contours.pmtiles -l contour -Z10 -z13 --force --no-tile-size-limit --simplification=8 -j '{"contour":["any",[">=","$zoom",12],["==","idx",1]]}' -P makkah-c2.geojsonseq
++ rm makkah-c2.geojsonseq
++ gdalwarp -q -overwrite -t_srs EPSG:3857 -r bilinear -srcnodata -32768 -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi makkah-dem.tif makkah-3857.tif
++ /usr/bin/python3 scripts/rgb.py makkah-3857.tif makkah-rgb.tif
+/usr/lib/python3/dist-packages/osgeo/gdal.py:606: FutureWarning: Neither gdal.UseExceptions() nor gdal.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+rgb ok 17931 20119
+++ which gdal2tiles.py
++ G2T=/usr/bin/gdal2tiles.py
++ /usr/bin/python3 /usr/bin/gdal2tiles.py --xyz -z 6-11 -r near -w none --processes=4 -q makkah-rgb.tif t-makkah
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
++ /usr/bin/python3 scripts/dir2mbtiles.py t-makkah makkah-dem.mbtiles makkah-dem
+tiles 1461 zooms 6 11
++ rm -rf t-makkah makkah-rgb.tif
++ ./pmtiles convert makkah-dem.mbtiles out/makkah-dem.pmtiles
+2026/11/09 15:14:25 convert.go:158: Pass 1: Assembling TileID set
+2026/11/09 15:14:25 convert.go:189: Pass 2: writing tiles
+   0% |                                             | (0/1461, 0 it/hr) [0s:0s]                                                                                 24% |█████████                                | (356/1461, 5440 it/s) [0s:0s]                                                                                 50% |████████████████████                     | (734/1461, 5606 it/s) [0s:0s]                                                                                 75% |██████████████████████████████          | (1096/1461, 5582 it/s) [0s:0s]                                                                                 96% |██████████████████████████████████████  | (1403/1461, 5364 it/s) [0s:0s]                                                                                100% |████████████████████████████████████████| (1461/1461, 5441 it/s)
+2026/11/09 15:14:25 convert.go:243: # of addressed tiles:  1461
+2026/11/09 15:14:25 convert.go:244: # of tile entries (after RLE):  933
+2026/11/09 15:14:25 convert.go:245: # of tile contents:  763
+2026/11/09 15:14:25 convert.go:268: Total dir bytes:  3005
+2026/11/09 15:14:25 convert.go:269: Average bytes per addressed tile: 2.06
+2026/11/09 15:14:25 convert.go:238: Finished in  294.221638ms
++ mv makkah-contours.pmtiles out/
++ rm -f makkah-dem.tif makkah-3857.tif makkah-dem.mbtiles makkah.vrt
++ ls -lh out
++ tee -a build.log
+total 180M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
+total 180M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
++ for k in $REGIONS
++ echo '== jazan'
++ tee -a build.log
+== jazan
+== jazan
++ python3 scripts/cop_tiles.py regions/jazan.geojson tileList.txt
++ tee -a build.log
+++ wc -l
++ echo 'ملفات الارتفاع: 9'
+ملفات الارتفاع: 9
+ملفات الارتفاع: 9
++ gdalbuildvrt -input_file_list jazan.list jazan.vrt
+0...10...20...30...40...50...60...70...80...90...100 - done.
++ read W S E N
++ gdalwarp -q -overwrite -te 41.4069079 16.3295295 43.3865024 18.108740100000002 -cutline regions/jazan.geojson -crop_to_cutline -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi jazan.vrt jazan-dem.tif
++ tail -3
++ gdal_contour -q -a ele -i 20 -f GeoJSONSeq jazan-dem.tif jazan-c.geojsonseq
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:00:09.
++ python3 -c $'\nimport json,sys\no=open(\'jazan-c2.geojsonseq\',\'w\')\nfor l in open(\'jazan-c.geojsonseq\'):\n    l=l.strip().lstrip(\'\\x1e\')\n    if not l: continue\n    f=json.loads(l); e=int(round(f[\'properties\'][\'ele\'])); f[\'properties\']={\'ele\':e,\'idx\':1 if e%100==0 else 0}; o.write(json.dumps(f)+\'\\n\')'
++ rm jazan-c.geojsonseq
++ tippecanoe -q -o jazan-contours.pmtiles -l contour -Z10 -z13 --force --no-tile-size-limit --simplification=8 -j '{"contour":["any",[">=","$zoom",12],["==","idx",1]]}' -P jazan-c2.geojsonseq
++ rm jazan-c2.geojsonseq
++ gdalwarp -q -overwrite -t_srs EPSG:3857 -r bilinear -srcnodata -32768 -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi jazan-dem.tif jazan-3857.tif
++ /usr/bin/python3 scripts/rgb.py jazan-3857.tif jazan-rgb.tif
+/usr/lib/python3/dist-packages/osgeo/gdal.py:606: FutureWarning: Neither gdal.UseExceptions() nor gdal.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+rgb ok 6625 6197
+++ which gdal2tiles.py
++ G2T=/usr/bin/gdal2tiles.py
++ /usr/bin/python3 /usr/bin/gdal2tiles.py --xyz -z 6-11 -r near -w none --processes=4 -q jazan-rgb.tif t-jazan
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
++ /usr/bin/python3 scripts/dir2mbtiles.py t-jazan jazan-dem.mbtiles jazan-dem
+tiles 202 zooms 6 11
++ rm -rf t-jazan jazan-rgb.tif
++ ./pmtiles convert jazan-dem.mbtiles out/jazan-dem.pmtiles
+2026/11/09 15:15:16 convert.go:158: Pass 1: Assembling TileID set
+2026/11/09 15:15:16 convert.go:189: Pass 2: writing tiles
+   0% |                                              | (0/202, 0 it/hr) [0s:0s]                                                                                100% |██████████████████████████████████████████| (202/202, 6999 it/s)
+2026/11/09 15:15:16 convert.go:243: # of addressed tiles:  202
+2026/11/09 15:15:16 convert.go:244: # of tile entries (after RLE):  171
+2026/11/09 15:15:16 convert.go:245: # of tile contents:  144
+2026/11/09 15:15:16 convert.go:268: Total dir bytes:  699
+2026/11/09 15:15:16 convert.go:269: Average bytes per addressed tile: 3.46
+2026/11/09 15:15:16 convert.go:238: Finished in  34.625634ms
++ mv jazan-contours.pmtiles out/
++ rm -f jazan-dem.tif jazan-3857.tif jazan-dem.mbtiles jazan.vrt
++ ls -lh out
++ tee -a build.log
+total 191M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner 6.2M Nov  9 15:15 jazan-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.5M Nov  9 15:15 jazan-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
+total 191M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner 6.2M Nov  9 15:15 jazan-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.5M Nov  9 15:15 jazan-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
++ for k in $REGIONS
++ echo '== najran'
++ tee -a build.log
+== najran
+== najran
++ python3 scripts/cop_tiles.py regions/najran.geojson tileList.txt
++ tee -a build.log
+++ wc -l
++ echo 'ملفات الارتفاع: 40'
+ملفات الارتفاع: 40
+ملفات الارتفاع: 40
++ gdalbuildvrt -input_file_list najran.list najran.vrt
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:00:18.
++ read W S E N
++ gdalwarp -q -overwrite -te 43.54569 16.9 52.051752699999994 19.4988889 -cutline regions/najran.geojson -crop_to_cutline -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi najran.vrt najran-dem.tif
++ tail -3
++ gdal_contour -q -a ele -i 20 -f GeoJSONSeq najran-dem.tif najran-c.geojsonseq
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:00:56.
++ python3 -c $'\nimport json,sys\no=open(\'najran-c2.geojsonseq\',\'w\')\nfor l in open(\'najran-c.geojsonseq\'):\n    l=l.strip().lstrip(\'\\x1e\')\n    if not l: continue\n    f=json.loads(l); e=int(round(f[\'properties\'][\'ele\'])); f[\'properties\']={\'ele\':e,\'idx\':1 if e%100==0 else 0}; o.write(json.dumps(f)+\'\\n\')'
++ rm najran-c.geojsonseq
++ tippecanoe -q -o najran-contours.pmtiles -l contour -Z10 -z13 --force --no-tile-size-limit --simplification=8 -j '{"contour":["any",[">=","$zoom",12],["==","idx",1]]}' -P najran-c2.geojsonseq
++ rm najran-c2.geojsonseq
++ gdalwarp -q -overwrite -t_srs EPSG:3857 -r bilinear -srcnodata -32768 -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi najran-dem.tif najran-3857.tif
++ /usr/bin/python3 scripts/rgb.py najran-3857.tif najran-rgb.tif
+/usr/lib/python3/dist-packages/osgeo/gdal.py:606: FutureWarning: Neither gdal.UseExceptions() nor gdal.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+rgb ok 30129 9428
+++ which gdal2tiles.py
++ G2T=/usr/bin/gdal2tiles.py
++ /usr/bin/python3 /usr/bin/gdal2tiles.py --xyz -z 6-11 -r near -w none --processes=4 -q najran-rgb.tif t-najran
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
++ /usr/bin/python3 scripts/dir2mbtiles.py t-najran najran-dem.mbtiles najran-dem
+tiles 1073 zooms 6 11
++ rm -rf t-najran najran-rgb.tif
++ ./pmtiles convert najran-dem.mbtiles out/najran-dem.pmtiles
+2026/11/09 15:20:21 convert.go:158: Pass 1: Assembling TileID set
+2026/11/09 15:20:21 convert.go:189: Pass 2: writing tiles
+   0% |                                             | (0/1073, 0 it/hr) [0s:0s]                                                                                 27% |███████████                              | (292/1073, 4471 it/s) [0s:0s]                                                                                 59% |████████████████████████                 | (634/1073, 4860 it/s) [0s:0s]                                                                                 73% |█████████████████████████████            | (784/1073, 4001 it/s) [0s:0s]                                                                                100% |████████████████████████████████████████| (1073/1073, 4324 it/s)
+2026/11/09 15:20:21 convert.go:243: # of addressed tiles:  1073
+2026/11/09 15:20:21 convert.go:244: # of tile entries (after RLE):  738
+2026/11/09 15:20:21 convert.go:245: # of tile contents:  655
+2026/11/09 15:20:21 convert.go:268: Total dir bytes:  2317
+2026/11/09 15:20:21 convert.go:269: Average bytes per addressed tile: 2.16
+2026/11/09 15:20:21 convert.go:238: Finished in  272.252932ms
++ mv najran-contours.pmtiles out/
++ rm -f najran-dem.tif najran-3857.tif najran-dem.mbtiles najran.vrt
++ ls -lh out
++ tee -a build.log
+total 267M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner 6.2M Nov  9 15:15 jazan-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.5M Nov  9 15:15 jazan-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
+-rw-r--r-- 1 runner runner  34M Nov  9 15:19 najran-contours.pmtiles
+-rw-r--r-- 1 runner runner  43M Nov  9 15:20 najran-dem.pmtiles
+total 267M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner 6.2M Nov  9 15:15 jazan-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.5M Nov  9 15:15 jazan-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
+-rw-r--r-- 1 runner runner  34M Nov  9 15:19 najran-contours.pmtiles
+-rw-r--r-- 1 runner runner  43M Nov  9 15:20 najran-dem.pmtiles
++ for k in $REGIONS
++ echo '== madinah'
++ tee -a build.log
+== madinah
+== madinah
++ python3 scripts/cop_tiles.py regions/madinah.geojson tileList.txt
++ tee -a build.log
+++ wc -l
++ echo 'ملفات الارتفاع: 35'
+ملفات الارتفاع: 35
+ملفات الارتفاع: 35
++ gdalbuildvrt -input_file_list madinah.list madinah.vrt
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:00:14.
++ read W S E N
++ gdalwarp -q -overwrite -te 37.034000000000006 22.4697101 42.208729999999996 27.5233099 -cutline regions/madinah.geojson -crop_to_cutline -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi madinah.vrt madinah-dem.tif
++ tail -3
++ gdal_contour -q -a ele -i 20 -f GeoJSONSeq madinah-dem.tif madinah-c.geojsonseq
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:01:50.
++ python3 -c $'\nimport json,sys\no=open(\'madinah-c2.geojsonseq\',\'w\')\nfor l in open(\'madinah-c.geojsonseq\'):\n    l=l.strip().lstrip(\'\\x1e\')\n    if not l: continue\n    f=json.loads(l); e=int(round(f[\'properties\'][\'ele\'])); f[\'properties\']={\'ele\':e,\'idx\':1 if e%100==0 else 0}; o.write(json.dumps(f)+\'\\n\')'
++ rm madinah-c.geojsonseq
++ tippecanoe -q -o madinah-contours.pmtiles -l contour -Z10 -z13 --force --no-tile-size-limit --simplification=8 -j '{"contour":["any",[">=","$zoom",12],["==","idx",1]]}' -P madinah-c2.geojsonseq
++ rm madinah-c2.geojsonseq
++ gdalwarp -q -overwrite -t_srs EPSG:3857 -r bilinear -srcnodata -32768 -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi madinah-dem.tif madinah-3857.tif
++ /usr/bin/python3 scripts/rgb.py madinah-3857.tif madinah-rgb.tif
+/usr/lib/python3/dist-packages/osgeo/gdal.py:606: FutureWarning: Neither gdal.UseExceptions() nor gdal.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+rgb ok 17366 18712
+++ which gdal2tiles.py
++ G2T=/usr/bin/gdal2tiles.py
++ /usr/bin/python3 /usr/bin/gdal2tiles.py --xyz -z 6-11 -r near -w none --processes=4 -q madinah-rgb.tif t-madinah
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
++ /usr/bin/python3 scripts/dir2mbtiles.py t-madinah madinah-dem.mbtiles madinah-dem
+tiles 1317 zooms 6 11
++ rm -rf t-madinah madinah-rgb.tif
++ ./pmtiles convert madinah-dem.mbtiles out/madinah-dem.pmtiles
+2026/11/09 15:27:47 convert.go:158: Pass 1: Assembling TileID set
+2026/11/09 15:27:47 convert.go:189: Pass 2: writing tiles
+   0% |                                             | (0/1317, 0 it/hr) [0s:0s]                                                                                 20% |████████                                 | (272/1317, 4157 it/s) [0s:0s]                                                                                 45% |██████████████████                       | (598/1317, 4571 it/s) [0s:0s]                                                                                 59% |████████████████████████                 | (781/1317, 3980 it/s) [0s:0s]                                                                                 82% |████████████████████████████████        | (1080/1317, 4128 it/s) [0s:0s]                                                                                100% |████████████████████████████████████████| (1317/1317, 4212 it/s)
+2026/11/09 15:27:47 convert.go:243: # of addressed tiles:  1317
+2026/11/09 15:27:47 convert.go:244: # of tile entries (after RLE):  904
+2026/11/09 15:27:47 convert.go:245: # of tile contents:  767
+2026/11/09 15:27:47 convert.go:268: Total dir bytes:  2847
+2026/11/09 15:27:47 convert.go:269: Average bytes per addressed tile: 2.16
+2026/11/09 15:27:47 convert.go:238: Finished in  342.492187ms
++ mv madinah-contours.pmtiles out/
++ rm -f madinah-dem.tif madinah-3857.tif madinah-dem.mbtiles madinah.vrt
++ ls -lh out
++ tee -a build.log
+total 388M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner 6.2M Nov  9 15:15 jazan-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.5M Nov  9 15:15 jazan-dem.pmtiles
+-rw-r--r-- 1 runner runner  68M Nov  9 15:26 madinah-contours.pmtiles
+-rw-r--r-- 1 runner runner  54M Nov  9 15:27 madinah-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
+-rw-r--r-- 1 runner runner  34M Nov  9 15:19 najran-contours.pmtiles
+-rw-r--r-- 1 runner runner  43M Nov  9 15:20 najran-dem.pmtiles
+total 388M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner 6.2M Nov  9 15:15 jazan-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.5M Nov  9 15:15 jazan-dem.pmtiles
+-rw-r--r-- 1 runner runner  68M Nov  9 15:26 madinah-contours.pmtiles
+-rw-r--r-- 1 runner runner  54M Nov  9 15:27 madinah-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
+-rw-r--r-- 1 runner runner  34M Nov  9 15:19 najran-contours.pmtiles
+-rw-r--r-- 1 runner runner  43M Nov  9 15:20 najran-dem.pmtiles
++ for k in $REGIONS
++ echo '== tabuk'
++ tee -a build.log
+== tabuk
+== tabuk
++ python3 scripts/cop_tiles.py regions/tabuk.geojson tileList.txt
++ tee -a build.log
+++ wc -l
++ echo 'ملفات الارتفاع: 41'
+ملفات الارتفاع: 41
+ملفات الارتفاع: 41
++ gdalbuildvrt -input_file_list tabuk.list tabuk.vrt
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:00:17.
++ read W S E N
++ gdalwarp -q -overwrite -te 34.4444055 24.5118431 39.99176 30.0255853 -cutline regions/tabuk.geojson -crop_to_cutline -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi tabuk.vrt tabuk-dem.tif
++ tail -3
++ gdal_contour -q -a ele -i 20 -f GeoJSONSeq tabuk-dem.tif tabuk-c.geojsonseq
+0...10...20...30...40...50...60...70...80...90...100 - done in 00:01:40.
++ python3 -c $'\nimport json,sys\no=open(\'tabuk-c2.geojsonseq\',\'w\')\nfor l in open(\'tabuk-c.geojsonseq\'):\n    l=l.strip().lstrip(\'\\x1e\')\n    if not l: continue\n    f=json.loads(l); e=int(round(f[\'properties\'][\'ele\'])); f[\'properties\']={\'ele\':e,\'idx\':1 if e%100==0 else 0}; o.write(json.dumps(f)+\'\\n\')'
++ rm tabuk-c.geojsonseq
++ tippecanoe -q -o tabuk-contours.pmtiles -l contour -Z10 -z13 --force --no-tile-size-limit --simplification=8 -j '{"contour":["any",[">=","$zoom",12],["==","idx",1]]}' -P tabuk-c2.geojsonseq
++ rm tabuk-c2.geojsonseq
++ gdalwarp -q -overwrite -t_srs EPSG:3857 -r bilinear -srcnodata -32768 -dstnodata -32768 -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES -wo NUM_THREADS=ALL_CPUS -multi tabuk-dem.tif tabuk-3857.tif
++ /usr/bin/python3 scripts/rgb.py tabuk-3857.tif tabuk-rgb.tif
+/usr/lib/python3/dist-packages/osgeo/gdal.py:606: FutureWarning: Neither gdal.UseExceptions() nor gdal.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+rgb ok 18424 20612
+++ which gdal2tiles.py
++ G2T=/usr/bin/gdal2tiles.py
++ /usr/bin/python3 /usr/bin/gdal2tiles.py --xyz -z 6-11 -r near -w none --processes=4 -q tabuk-rgb.tif t-tabuk
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+/usr/lib/python3/dist-packages/osgeo/osr.py:424: FutureWarning: Neither osr.UseExceptions() nor osr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
++ /usr/bin/python3 scripts/dir2mbtiles.py t-tabuk tabuk-dem.mbtiles tabuk-dem
+tiles 1518 zooms 6 11
++ rm -rf t-tabuk tabuk-rgb.tif
++ ./pmtiles convert tabuk-dem.mbtiles out/tabuk-dem.pmtiles
+2026/11/09 15:35:29 convert.go:158: Pass 1: Assembling TileID set
+2026/11/09 15:35:29 convert.go:189: Pass 2: writing tiles
+   0% |                                             | (0/1518, 0 it/hr) [0s:0s]                                                                                 14% |█████                                    | (221/1518, 3379 it/s) [0s:0s]                                                                                 36% |██████████████                           | (551/1518, 4213 it/s) [0s:0s]                                                                                 47% |███████████████████                      | (728/1518, 3716 it/s) [0s:0s]                                                                                 58% |███████████████████████                  | (893/1518, 3421 it/s) [0s:0s]                                                                                100% |████████████████████████████████████████| (1518/1518, 4706 it/s)
+2026/11/09 15:35:30 convert.go:243: # of addressed tiles:  1518
+2026/11/09 15:35:30 convert.go:244: # of tile entries (after RLE):  962
+2026/11/09 15:35:30 convert.go:245: # of tile contents:  805
+2026/11/09 15:35:30 convert.go:268: Total dir bytes:  2950
+2026/11/09 15:35:30 convert.go:269: Average bytes per addressed tile: 1.94
+2026/11/09 15:35:30 convert.go:238: Finished in  353.21357ms
++ mv tabuk-contours.pmtiles out/
++ rm -f tabuk-dem.tif tabuk-3857.tif tabuk-dem.mbtiles tabuk.vrt
++ ls -lh out
++ tee -a build.log
+total 500M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner 6.2M Nov  9 15:15 jazan-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.5M Nov  9 15:15 jazan-dem.pmtiles
+-rw-r--r-- 1 runner runner  68M Nov  9 15:26 madinah-contours.pmtiles
+-rw-r--r-- 1 runner runner  54M Nov  9 15:27 madinah-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
+-rw-r--r-- 1 runner runner  34M Nov  9 15:19 najran-contours.pmtiles
+-rw-r--r-- 1 runner runner  43M Nov  9 15:20 najran-dem.pmtiles
+-rw-r--r-- 1 runner runner  58M Nov  9 15:34 tabuk-contours.pmtiles
+-rw-r--r-- 1 runner runner  55M Nov  9 15:35 tabuk-dem.pmtiles
+total 500M
+-rw-r--r-- 1 runner runner  46M Nov  9 15:06 asir-contours.pmtiles
+-rw-r--r-- 1 runner runner  30M Nov  9 15:06 asir-dem.pmtiles
+-rw-r--r-- 1 runner runner 9.0M Nov  9 15:07 baha-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.8M Nov  9 15:07 baha-dem.pmtiles
+-rw-r--r-- 1 runner runner 6.2M Nov  9 15:15 jazan-contours.pmtiles
+-rw-r--r-- 1 runner runner 4.5M Nov  9 15:15 jazan-dem.pmtiles
+-rw-r--r-- 1 runner runner  68M Nov  9 15:26 madinah-contours.pmtiles
+-rw-r--r-- 1 runner runner  54M Nov  9 15:27 madinah-dem.pmtiles
+-rw-r--r-- 1 runner runner  47M Nov  9 15:13 makkah-contours.pmtiles
+-rw-r--r-- 1 runner runner  45M Nov  9 15:14 makkah-dem.pmtiles
+-rw-r--r-- 1 runner runner  34M Nov  9 15:19 najran-contours.pmtiles
+-rw-r--r-- 1 runner runner  43M Nov  9 15:20 najran-dem.pmtiles
+-rw-r--r-- 1 runner runner  58M Nov  9 15:34 tabuk-contours.pmtiles
+-rw-r--r-- 1 runner runner  55M Nov  9 15:35 tabuk-dem.pmtiles
+{
+ "asir": {
+  "contours": {
+   "file": "terrain/asir-contours.pmtiles",
+   "size": 47667889,
+   "md5": "b53f387f61f3dd2adda057b975e835f8",
+   "updated": "2026-11-09"
+  },
+  "dem": {
+   "file": "terrain/asir-dem.pmtiles",
+   "size": 30652921,
+   "md5": "93b0323abd70f333aac56366f5aa294c",
+   "updated": "2026-11-09"
+  }
+ },
+ "baha": {
+  "contours": {
+   "file": "terrain/baha-contours.pmtiles",
+   "size": 9395573,
+   "md5": "5aa8f6e45ca2a847cce71f18625cc726",
+   "updated": "2026-11-09"
+  },
+  "dem": {
+   "file": "terrain/baha-dem.pmtiles",
+   "size": 4988473,
+   "md5": "2c187dbd00039ce50c3efc23e4dd5b23",
+   "updated": "2026-11-09"
+  }
+ },
+ "jazan": {
+  "contours": {
+   "file": "terrain/jazan-contours.pmtiles",
+   "size": 6467817,
+   "md5": "05ad418b9792b37ee3937b391d9d2a6f",
+   "updated": "2026-11-09"
+  },
+  "dem": {
+   "file": "terrain/jazan-dem.pmtiles",
+   "size": 4664887,
+   "md5": "84a704766765b63208a8296bbed35150",
+   "updated": "2026-11-09"
+  }
+ },
+ "madinah": {
+  "contours": {
+   "file": "terrain/madinah-contours.pmtiles",
+   "size": 70442701,
+   "md5": "152e2f63341809fc3ba7ed417949c204",
+   "updated": "2026-11-09"
+  },
+  "dem": {
+   "file": "terrain/madinah-dem.pmtiles",
+   "size": 56619125,
+   "md5": "e850e3f7748dfb719cb8320d32677d23",
+   "updated": "2026-11-09"
+  }
+ },
+ "makkah": {
+  "contours": {
+   "file": "terrain/makkah-contours.pmtiles",
+   "size": 48782642,
+   "md5": "f1e5dcf67a1ebf56afd27e9a0604138d",
+   "updated": "2026-11-09"
+  },
+  "dem": {
+   "file": "terrain/makkah-dem.pmtiles",
+   "size": 46796652,
+   "md5": "592ae7500d216f22f8a678526bc94bad",
+   "updated": "2026-11-09"
+  }
+ },
+ "najran": {
+  "contours": {
+   "file": "terrain/najran-contours.pmtiles",
+   "size": 35412861,
+   "md5": "ed6712dc5467c39c7340ff9e1e4d08bb",
+   "updated": "2026-11-09"
+  },
+  "dem": {
+   "file": "terrain/najran-dem.pmtiles",
+   "size": 44631606,
+   "md5": "f82d963283592f838116e2b36efff2ab",
+   "updated": "2026-11-09"
+  }
+ },
+ "tabuk": {
+  "contours": {
+   "file": "terrain/tabuk-contours.pmtiles",
+   "size": 60146129,
+   "md5": "47b6d0d7259a8ec102a7f9cf9c0a0581",
+   "updated": "2026-11-09"
+  },
+  "dem": {
+   "file": "terrain/tabuk-dem.pmtiles",
+   "size": 57510538,
+   "md5": "9fb92e62b6a920bc56f53f554ca0df77",
+   "updated": "2026-11-09"
+  }
+ }
+}
