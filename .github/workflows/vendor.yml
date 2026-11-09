@@ -1,0 +1,41 @@
+name: تجهيز مكتبات الخريطة للتطبيق
+on:
+  push:
+    paths: ['.github/workflows/vendor.yml']
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: المكتبات
+        run: |
+          mkdir -p v && cd v && npm init -y >/dev/null
+          npm i --no-audit --no-fund maplibre-gl@5 pmtiles@4 @protomaps/basemaps@5 @mapbox/mapbox-gl-rtl-text@0.3.0 maplibre-contour >/dev/null
+          mkdir -p ../out/lib
+          cp node_modules/maplibre-gl/dist/maplibre-gl.js node_modules/maplibre-gl/dist/maplibre-gl.css ../out/lib/
+          cp node_modules/pmtiles/dist/pmtiles.js ../out/lib/ 2>/dev/null || ls node_modules/pmtiles/dist
+          ls node_modules/@protomaps/basemaps/dist; cp node_modules/@protomaps/basemaps/dist/basemaps.js ../out/lib/ 2>/dev/null || true
+          ls node_modules/@mapbox/mapbox-gl-rtl-text/dist 2>/dev/null || ls node_modules/@mapbox/mapbox-gl-rtl-text
+          cp node_modules/@mapbox/mapbox-gl-rtl-text/dist/mapbox-gl-rtl-text.js ../out/lib/ 2>/dev/null || cp node_modules/@mapbox/mapbox-gl-rtl-text/mapbox-gl-rtl-text.js ../out/lib/ || true
+          cp node_modules/maplibre-contour/dist/index.min.js ../out/lib/maplibre-contour.js 2>/dev/null || ls node_modules/maplibre-contour/dist
+          node -e 'for(const p of ["maplibre-gl","pmtiles","@protomaps/basemaps","@mapbox/mapbox-gl-rtl-text","maplibre-contour"])console.log(p,require("./node_modules/"+p+"/package.json").version)' | tee ../out/lib/VERSIONS.txt
+          cp node_modules/@protomaps/basemaps/package.json ../out/lib/basemaps-package.json
+      - name: الخطوط والرموز
+        run: |
+          cd out && R=https://raw.githubusercontent.com/protomaps/basemaps-assets/main
+          for f in "Noto Sans Regular" "Noto Sans Medium" "Noto Sans Italic"; do
+            mkdir -p "fonts/$f"; e=$(echo "$f" | sed 's/ /%20/g')
+            for r in 0-255 256-511 512-767 768-1023 1536-1791 1792-2047 2048-2303 8192-8447 8448-8703 64256-64511 65024-65279 65280-65535; do
+              curl -fsSL -o "fonts/$f/$r.pbf" "$R/fonts/$e/$r.pbf" || echo "ناقص $f $r"
+            done
+          done
+          mkdir -p sprites/v4
+          for s in light dark white grayscale black; do for x in json png @2x.json @2x.png; do curl -fsSL -o "sprites/v4/$s$x" "$R/sprites/v4/$s$x" || true; done; done
+          du -sh fonts sprites lib; ls -la lib
+      - name: حفظ
+        run: |
+          cd out && git init -q && git checkout -q -b vendor && git add -A && git -c user.name=bot -c user.email=bot@x commit -qm vendor
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" vendor
