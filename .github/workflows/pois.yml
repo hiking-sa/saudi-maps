@@ -47,15 +47,24 @@ jobs:
           import duckdb
           c=duckdb.connect()
           c.execute("INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2'; SET s3_access_key_id=''; SET s3_secret_access_key=''; SET s3_session_token='';")
-          q="""COPY (SELECT names.primary AS name,
-                 COALESCE(TRY(element_at(names.common,'ar')[1]),'') AS name_ar,
-                 categories.primary AS cat,
+          src="read_parquet('s3://overturemaps-us-west-2/release/$REL/theme=places/type=place/*', hive_partitioning=1)"
+          cols={r[0]:r[1] for r in c.execute("DESCRIBE SELECT * FROM "+src+" LIMIT 1").fetchall()}
+          print("columns:", {k:v[:120] for k,v in cols.items()})
+          if "basic_category" in cols: cat="basic_category"
+          elif "taxonomy" in cols: cat="taxonomy.primary"
+          elif "categories" in cols: cat="categories.primary"
+          else: cat="NULL"
+          nar="COALESCE(TRY(element_at(names.common,'ar')[1]),'')" if "MAP" in cols.get("names","") else "''"
+          conf="COALESCE(confidence,1) >= 0.6" if "confidence" in cols else "TRUE"
+          q=f"""COPY (SELECT names.primary AS name, {nar} AS name_ar, {cat} AS cat,
                  (bbox.xmin+bbox.xmax)/2 AS lon,(bbox.ymin+bbox.ymax)/2 AS lat
-               FROM read_parquet('s3://overturemaps-us-west-2/release/$REL/theme=places/type=place/*', hive_partitioning=1)
-               WHERE bbox.xmin BETWEEN 34.4 AND 55.8 AND bbox.ymin BETWEEN 16.2 AND 32.3 AND COALESCE(confidence,1) >= 0.6)
+               FROM {src}
+               WHERE bbox.xmin BETWEEN 34.4 AND 55.8 AND bbox.ymin BETWEEN 16.2 AND 32.3 AND {conf})
              TO 'ov.csv' (HEADER, DELIMITER ',')"""
+          print(q)
           c.execute(q)
           print(c.execute("SELECT count(*) FROM read_csv_auto('ov.csv')").fetchone())
+          print(c.execute("SELECT cat,count(*) n FROM read_csv_auto('ov.csv') GROUP BY 1 ORDER BY 2 DESC LIMIT 40").fetchall())
           PY
           ls -lh ov.csv || true
       - name: ملفات الأماكن لكل منطقة
