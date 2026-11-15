@@ -1,0 +1,28 @@
+name: حزمة المصمم (عسير)
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/designer.yml']
+permissions: { contents: write }
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: تنزيل ملفات عسير من مخزن التطبيق
+        run: |
+          set -eo pipefail
+          EP="${{ secrets.R2_ENDPOINT }}"; EP=$(echo "$EP" | tr -d '[:space:]'); EP=${EP%/}; EP=${EP%/saudi-maps}
+          mkdir out
+          aws s3 cp s3://saudi-maps/regions/asir.pmtiles out/asir-base.pmtiles --endpoint-url "$EP" --only-show-errors
+          aws s3 cp s3://saudi-maps/terrain/asir-dem.pmtiles out/asir-dem.pmtiles --endpoint-url "$EP" --only-show-errors
+          aws s3 cp s3://saudi-maps/terrain/asir-contours.pmtiles out/asir-contours.pmtiles --endpoint-url "$EP" --only-show-errors
+          ls -lh out
+      - name: نشرها كإصدار للتنزيل
+        run: |
+          gh release delete designer-asir -y --cleanup-tag -R "${{ github.repository }}" || true
+          gh release create designer-asir out/*.pmtiles -R "${{ github.repository }}" -t "حزمة المصمم: عسير" -n "ملفات خريطة منطقة عسير للتصميم. البيانات © مساهمو OpenStreetMap (ODbL) وارتفاعات Copernicus."
